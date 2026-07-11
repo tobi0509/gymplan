@@ -1,0 +1,24 @@
+services:
+  gymplan:
+    build: .
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=file:/data/prod.db
+    volumes:
+      - gymplan_data:/data
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.gymplan.rule=Host(`gymplan.einfach-automatisiert.cloud`)"
+      - traefik.http.routers.gymplan.entrypoints=websecure
+      - traefik.http.routers.gymplan.tls.certresolver=letsencrypt
+      - traefik.http.services.gymplan.loadbalancer.server.port=3000
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  gymplan_data:
+    driver: local

@@ -2,26 +2,94 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Bevel × Whoop – dunkles, weiches, datenstarkes Theme */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --base: #08090b;
+  --surface: #121417;
+  --surface-2: #191c21;
+  --border: #23272e;
+  --foreground: #f3f5f7;
+  --muted: #8b93a1;
+  --accent: #00e6a8; /* Elektrik-Grün (Whoop-Energie) */
+  --accent-soft: rgba(0, 230, 168, 0.14);
+  --warn: #ffcf4d;
+  --danger: #ff5c72;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  min-height: 100%;
 }
 
 body {
   color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(1200px 700px at 50% -10%, rgba(0, 230, 168, 0.06), transparent 60%),
+    var(--base);
+  -webkit-font-smoothing: antialiased;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+@layer components {
+  .card {
+    @apply rounded-2xl border bg-surface p-5 shadow-card;
   }
+  .card-2 {
+    @apply rounded-xl border bg-surface-2 p-4;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-accent text-black hover:brightness-110 shadow-glow;
+  }
+  .btn-ghost {
+    @apply btn border bg-surface-2 text-foreground hover:bg-surface;
+  }
+  .btn-danger {
+    @apply btn border border-transparent bg-[color:var(--danger)] text-black hover:brightness-110;
+  }
+  .input {
+    @apply w-full rounded-xl border bg-surface-2 px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent;
+  }
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium text-muted;
+  }
+  .pill-active {
+    @apply border-accent bg-[color:var(--accent-soft)] text-accent;
+  }
+}
+
+/* Range-Slider (Motivation / Anstrengung) */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 26px;
+  width: 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 16px rgba(0, 230, 168, 0.5);
+  cursor: pointer;
+  border: 3px solid var(--base);
+}
+input[type="range"]::-moz-range-thumb {
+  height: 26px;
+  width: 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  cursor: pointer;
+  border: 3px solid var(--base);
 }

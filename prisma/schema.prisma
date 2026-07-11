@@ -1,0 +1,102 @@
+// GymPlan – Datenmodell
+// SQLite lokal; für Cloud später nur provider/url auf postgresql tauschen.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// --- Muskeln & Übungen --------------------------------------------------
+
+model Muscle {
+  id        String           @id @default(cuid())
+  name      String           @unique // Anzeigename, z.B. "Brust"
+  group     String // grobe Gruppe, z.B. "Oberkörper"
+  bodyPart  String // "FRONT" | "BACK" – auf welcher Körperseite gezeichnet
+  svgKey    String           @unique // ID des Pfads in der BodyMap-SVG
+  exercises ExerciseMuscle[]
+}
+
+model Exercise {
+  id        String           @id @default(cuid())
+  name      String           @unique
+  equipment String // KETTLEBELL | DUMBBELL | BARBELL | BODYWEIGHT | MACHINE | CABLE | OTHER
+  category  String? // z.B. "Push", "Pull", "Legs"
+  notes     String?
+  muscles   ExerciseMuscle[]
+  planItems PlanExercise[]
+  createdAt DateTime         @default(now())
+}
+
+// Verknüpfung Übung <-> Muskel mit Anteil in Prozent (Summe je Übung ~100)
+model ExerciseMuscle {
+  id         String   @id @default(cuid())
+  exercise   Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  exerciseId String
+  muscle     Muscle   @relation(fields: [muscleId], references: [id], onDelete: Cascade)
+  muscleId   String
+  percentage Int
+
+  @@unique([exerciseId, muscleId])
+}
+
+// --- Pläne --------------------------------------------------------------
+
+model Plan {
+  id         String           @id @default(cuid())
+  name       String
+  ownerName  String // Trainer / Ersteller
+  shareToken String           @unique @default(cuid())
+  createdAt  DateTime         @default(now())
+  exercises  PlanExercise[]
+  sessions   WorkoutSession[]
+}
+
+model PlanExercise {
+  id           String   @id @default(cuid())
+  plan         Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId       String
+  exercise     Exercise @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  exerciseId   String
+  order        Int      @default(0)
+  sets         Int      @default(3)
+  targetReps   Int?
+  targetWeight Float?
+  setLogs      SetLog[]
+}
+
+// --- Trainings-Sessions (Kunde) ----------------------------------------
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model WorkoutSession {
+  id         String    @id @default(cuid())
+  plan       Plan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId     String
+  clientName String
+  motivation Int? // 1–20, vor dem Training
+  exertion   Int? // 1–20, nach dem Training
+  status     String    @default("IN_PROGRESS") // IN_PROGRESS | COMPLETED | CANCELLED
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  setLogs    SetLog[]
+}
+
+model SetLog {
+  id             String         @id @default(cuid())
+  session        WorkoutSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId      String
+  planExercise   PlanExercise   @relation(fields: [planExerciseId], references: [id], onDelete: Cascade)
+  planExerciseId String
+  setNumber      Int
+  weight         Float?
+  reps           Int?
+}

@@ -1,101 +1,108 @@
-import Image from "next/image";
+import Link from "next/link";
+import TrainerNav from "@/components/TrainerNav";
+import { prisma } from "@/lib/prisma";
+import { createPlan, deletePlan } from "./actions";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function DashboardPage() {
+  const plans = await prisma.plan.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      _count: { select: { exercises: true, sessions: true } },
+    },
+  });
+  const exerciseCount = await prisma.exercise.count();
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <>
+      <TrainerNav />
+      <main className="mx-auto max-w-5xl px-4 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Deine Trainingspläne</h1>
+          <p className="mt-1 text-muted">
+            Erstelle einen Wochenplan, sieh die Muskel-Abdeckung live und teile ihn
+            per Link. {exerciseCount} Übungen in der Datenbank.
+          </p>
+        </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+        <div className="grid gap-6 md:grid-cols-[1fr_320px]">
+          {/* Plan-Liste */}
+          <section className="space-y-3">
+            {plans.length === 0 && (
+              <div className="card text-muted">
+                Noch keine Pläne. Erstelle rechts deinen ersten Plan.
+              </div>
+            )}
+            {plans.map((p) => (
+              <div key={p.id} className="card flex items-center justify-between">
+                <div>
+                  <Link
+                    href={`/plans/${p.id}`}
+                    className="text-lg font-semibold hover:text-accent"
+                  >
+                    {p.name}
+                  </Link>
+                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted">
+                    <span className="chip">{p._count.exercises} Übungen</span>
+                    <span className="chip">{p._count.sessions} Sessions</span>
+                    <span className="chip">von {p.ownerName}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link href={`/plans/${p.id}`} className="btn-ghost">
+                    Öffnen
+                  </Link>
+                  <form action={deletePlan}>
+                    <input type="hidden" name="id" value={p.id} />
+                    <button
+                      className="btn-ghost text-danger"
+                      type="submit"
+                      aria-label="Plan löschen"
+                    >
+                      ✕
+                    </button>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </section>
+
+          {/* Neuer Plan */}
+          <aside>
+            <form action={createPlan} className="card space-y-3">
+              <h2 className="text-lg font-semibold">Neuer Plan</h2>
+              <div>
+                <label className="label" htmlFor="name">
+                  Plan-Name
+                </label>
+                <input
+                  id="name"
+                  name="name"
+                  className="input"
+                  placeholder="z.B. Ganzkörper Woche A"
+                  required
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="ownerName">
+                  Trainer
+                </label>
+                <input
+                  id="ownerName"
+                  name="ownerName"
+                  className="input"
+                  placeholder="Dein Name"
+                  defaultValue="Trainer"
+                />
+              </div>
+              <button className="btn-primary w-full" type="submit">
+                Plan erstellen
+              </button>
+            </form>
+          </aside>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+    </>
   );
 }
