@@ -1,15 +1,18 @@
 import Link from "next/link";
 import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
+import { requireTrainer } from "@/lib/auth";
 import { createPlan, deletePlan } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const trainer = await requireTrainer();
   const plans = await prisma.plan.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       _count: { select: { exercises: true, sessions: true } },
+      assignedTo: { select: { displayName: true } },
     },
   });
   const exerciseCount = await prisma.exercise.count();
@@ -47,6 +50,11 @@ export default async function DashboardPage() {
                     <span className="chip">{p._count.exercises} Übungen</span>
                     <span className="chip">{p._count.sessions} Sessions</span>
                     <span className="chip">von {p.ownerName}</span>
+                    {p.assignedTo && (
+                      <span className="chip text-accent">
+                        → {p.assignedTo.displayName}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -93,7 +101,7 @@ export default async function DashboardPage() {
                   name="ownerName"
                   className="input"
                   placeholder="Dein Name"
-                  defaultValue="Trainer"
+                  defaultValue={trainer.displayName}
                 />
               </div>
               <button className="btn-primary w-full" type="submit">

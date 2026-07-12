@@ -3,7 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EQUIPMENT, EQUIPMENT_LABEL, type Equipment } from "@/lib/constants";
-import { saveExercise, deleteExercise, type ExercisePayload } from "./actions";
+import {
+  saveExercise,
+  deleteExercise,
+  importImage,
+  type ExercisePayload,
+} from "./actions";
 
 type Muscle = { id: string; name: string; group: string };
 type ExRow = {
@@ -11,6 +16,7 @@ type ExRow = {
   name: string;
   equipment: string;
   category: string | null;
+  imageUrl: string | null;
   muscles: { muscleId: string; percentage: number }[];
 };
 
@@ -18,6 +24,7 @@ const EMPTY_DRAFT = (): ExercisePayload => ({
   name: "",
   equipment: "DUMBBELL",
   category: "",
+  imageUrl: null,
   muscles: [],
 });
 
@@ -54,6 +61,7 @@ export default function ExercisesClient({
       name: e.name,
       equipment: e.equipment,
       category: e.category || "",
+      imageUrl: e.imageUrl,
       muscles: e.muscles.map((m) => ({ ...m })),
     });
   }
@@ -116,11 +124,25 @@ export default function ExercisesClient({
           return (
             <div key={e.id} className="card">
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="font-semibold">{e.name}</div>
-                  <div className="mt-0.5 text-xs text-muted">
-                    {EQUIPMENT_LABEL[e.equipment as Equipment] ?? e.equipment}
-                    {e.category ? ` · ${e.category}` : ""}
+                <div className="flex items-start gap-3">
+                  {e.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={e.imageUrl}
+                      alt={e.name}
+                      className="h-12 w-16 shrink-0 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="grid h-12 w-16 shrink-0 place-items-center rounded-lg bg-surface-2 text-lg">
+                      🏋️
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-semibold">{e.name}</div>
+                    <div className="mt-0.5 text-xs text-muted">
+                      {EQUIPMENT_LABEL[e.equipment as Equipment] ?? e.equipment}
+                      {e.category ? ` · ${e.category}` : ""}
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -186,6 +208,50 @@ function Editor({
   onCancel: () => void;
   pending: boolean;
 }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [urlValue, setUrlValue] = useState(draft.imageUrl ?? "");
+
+  async function onImportUrl() {
+    const url = urlValue.trim();
+    if (!url) return;
+    setUploadError(null);
+    setImporting(true);
+    try {
+      const res = await importImage(url);
+      if (!res.ok) {
+        setUploadError(res.error);
+        return;
+      }
+      setDraft({ ...draft, imageUrl: res.url });
+      setUrlValue(res.url);
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // erlaubt erneuten Upload derselben Datei
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload fehlgeschlagen");
+      setDraft({ ...draft, imageUrl: data.url });
+      setUrlValue(data.url);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Upload fehlgeschlagen");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const pctFor = (id: string) =>
     draft.muscles.find((m) => m.muscleId === id)?.percentage ?? 0;
 
@@ -249,6 +315,78 @@ function Editor({
               onChange={(e) => setDraft({ ...draft, category: e.target.value })}
               placeholder="Push / Pull / Legs…"
             />
+          </div>
+        </div>
+
+        {/* Beispielbild */}
+        <div>
+          <label className="label">Beispielbild (zeigt dem Kunden die Ausführung)</label>
+          <div className="flex items-center gap-3">
+            {draft.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={draft.imageUrl}
+                alt="Vorschau"
+                className="h-20 w-28 shrink-0 rounded-xl border object-cover"
+              />
+            ) : (
+              <div className="grid h-20 w-28 shrink-0 place-items-center rounded-xl border bg-surface-2 text-2xl">
+                🏋️
+              </div>
+            )}
+            <div className="flex-1 space-y-2">
+              <div className="flex gap-2">
+                <label className="btn-ghost cursor-pointer">
+                  {uploading ? "Lädt…" : "Bild hochladen"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={onUpload}
+                  />
+                </label>
+                {draft.imageUrl && (
+                  <button
+                    className="btn-ghost text-danger"
+                    onClick={() => {
+                      setDraft({ ...draft, imageUrl: null });
+                      setUrlValue("");
+                      setUploadError(null);
+                    }}
+                  >
+                    Entfernen
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  className="input"
+                  value={urlValue}
+                  onChange={(e) => setUrlValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      onImportUrl();
+                    }
+                  }}
+                  placeholder="…oder Bild-URL einfügen"
+                />
+                <button
+                  className="btn-ghost whitespace-nowrap"
+                  onClick={onImportUrl}
+                  disabled={importing || !urlValue.trim()}
+                >
+                  {importing ? "Lädt…" : "Laden"}
+                </button>
+              </div>
+              <p className="text-xs text-muted">
+                Der Link wird heruntergeladen und lokal gespeichert.
+              </p>
+              {uploadError && (
+                <p className="text-xs text-danger">{uploadError}</p>
+              )}
+            </div>
           </div>
         </div>
 

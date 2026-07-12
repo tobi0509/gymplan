@@ -13,6 +13,7 @@ import {
 type Ex = {
   planExerciseId: string;
   name: string;
+  imageUrl: string | null;
   sets: number;
   targetReps: number | null;
   targetWeight: number | null;
@@ -21,21 +22,21 @@ type Ex = {
 type Phase = "motivation" | "workout" | "exertion" | "done";
 type LogVal = { weight: string; reps: string };
 
-const NAME_KEY = "gymplan.clientName";
-
 export default function SessionFlowClient({
   shareToken,
   planId,
   planName,
+  clientName,
   exercises,
 }: {
   shareToken: string;
   planId: string;
   planName: string;
+  clientName: string;
   exercises: Ex[];
 }) {
   const router = useRouter();
-  const [name, setName] = useState<string | null>(null);
+  const name = clientName;
   const [phase, setPhase] = useState<Phase>("motivation");
   const [motivation, setMotivation] = useState(12);
   const [exertion, setExertion] = useState(12);
@@ -59,19 +60,9 @@ export default function SessionFlowClient({
     return init;
   });
 
-  useEffect(() => {
-    const n = localStorage.getItem(NAME_KEY);
-    if (!n) {
-      router.replace(`/t/${shareToken}`);
-      return;
-    }
-    setName(n);
-  }, [router, shareToken]);
-
   async function beginWorkout() {
-    if (!name) return;
     setBusy(true);
-    const { sessionId } = await startSession(planId, name, motivation);
+    const { sessionId } = await startSession(planId, motivation);
     setSessionId(sessionId);
     setBusy(false);
     setPhase("workout");
@@ -110,14 +101,6 @@ export default function SessionFlowClient({
   async function doCancel() {
     if (sessionId) await cancelSession(sessionId);
     router.replace(`/t/${shareToken}`);
-  }
-
-  if (!name) {
-    return (
-      <main className="grid min-h-screen place-items-center text-muted">
-        Lädt…
-      </main>
-    );
   }
 
   // --- Motivation ---
@@ -184,6 +167,12 @@ export default function SessionFlowClient({
           </p>
           <button
             className="btn-primary w-full"
+            onClick={() => router.replace(`/t/${shareToken}/history`)}
+          >
+            📈 Verlauf ansehen
+          </button>
+          <button
+            className="btn-ghost w-full"
             onClick={() => router.replace(`/t/${shareToken}`)}
           >
             Zurück zum Plan
@@ -205,6 +194,14 @@ export default function SessionFlowClient({
       progress={(exIdx) / Math.max(1, exercises.length)}
     >
       <div className="card space-y-4">
+        {ex.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={ex.imageUrl}
+            alt={`So geht ${ex.name}`}
+            className="max-h-56 w-full rounded-xl border bg-white object-contain"
+          />
+        )}
         <div>
           <h2 className="text-2xl font-bold">{ex.name}</h2>
           <p className="text-sm text-muted">

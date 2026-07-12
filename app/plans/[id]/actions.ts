@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { requireTrainer } from "@/lib/auth";
 
 export type PlanExerciseDTO = {
   id: string;
@@ -37,6 +38,7 @@ async function toDTO(planExerciseId: string): Promise<PlanExerciseDTO> {
 }
 
 export async function addExerciseToPlan(planId: string, exerciseId: string) {
+  await requireTrainer();
   const count = await prisma.planExercise.count({ where: { planId } });
   const created = await prisma.planExercise.create({
     data: { planId, exerciseId, order: count },
@@ -49,6 +51,7 @@ export async function updatePlanExercise(
   id: string,
   fields: { sets?: number; targetReps?: number | null; targetWeight?: number | null },
 ) {
+  await requireTrainer();
   await prisma.planExercise.update({
     where: { id },
     data: {
@@ -61,11 +64,13 @@ export async function updatePlanExercise(
 }
 
 export async function removePlanExercise(id: string) {
+  await requireTrainer();
   await prisma.planExercise.delete({ where: { id } });
   return { ok: true };
 }
 
 export async function renamePlan(id: string, name: string) {
+  await requireTrainer();
   await prisma.plan.update({ where: { id }, data: { name: name.trim() || "Plan" } });
   revalidatePath(`/plans/${id}`);
   return { ok: true };

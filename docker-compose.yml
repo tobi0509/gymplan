@@ -4,8 +4,11 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL=file:/data/prod.db
+      - TRAINER_USERNAME=${TRAINER_USERNAME:-trainer}
+      - TRAINER_PASSWORD=${TRAINER_PASSWORD:-}
     volumes:
       - gymplan_data:/data
+      - gymplan_images:/app/public/exercise-images
     networks:
       - proxy
     labels:
@@ -21,4 +24,6 @@ networks:
 
 volumes:
   gymplan_data:
+    driver: local
+  gymplan_images:
     driver: local

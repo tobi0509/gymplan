@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requireAccount, ROLE } from "@/lib/auth";
 import BodyMap, { toBodyData } from "@/components/BodyMap";
 import { computeCoverage } from "@/lib/coverage";
 import { EQUIPMENT_LABEL, type Equipment } from "@/lib/constants";
@@ -12,6 +14,7 @@ export default async function ClientPlanPage({
 }: {
   params: { shareToken: string };
 }) {
+  const account = await requireAccount();
   const plan = await prisma.plan.findUnique({
     where: { shareToken: params.shareToken },
     include: {
@@ -22,6 +25,14 @@ export default async function ClientPlanPage({
     },
   });
   if (!plan) notFound();
+  // Kunden sehen nur eigene (oder nicht zugewiesene) Pläne
+  if (
+    account.role === ROLE.CLIENT &&
+    plan.assignedToId &&
+    plan.assignedToId !== account.id
+  ) {
+    notFound();
+  }
 
   const muscles = await prisma.muscle.findMany({ orderBy: { name: "asc" } });
 
@@ -67,6 +78,14 @@ export default async function ClientPlanPage({
                 <span className="grid h-6 w-6 place-items-center rounded-lg bg-surface text-xs text-muted">
                   {i + 1}
                 </span>
+                {pe.exercise.imageUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={pe.exercise.imageUrl}
+                    alt={pe.exercise.name}
+                    className="h-10 w-14 shrink-0 rounded-lg object-cover"
+                  />
+                )}
                 <div>
                   <div className="text-sm font-medium">{pe.exercise.name}</div>
                   <div className="text-xs text-muted">
@@ -92,7 +111,24 @@ export default async function ClientPlanPage({
       <StartGate
         shareToken={params.shareToken}
         disabled={plan.exercises.length === 0}
+        clientName={account.displayName}
       />
+
+      <Link
+        href={`/t/${params.shareToken}/history`}
+        className="btn-ghost mt-3 w-full"
+      >
+        📈 Verlauf & Fortschritt ansehen
+      </Link>
+
+      <div className="mt-4 text-center">
+        <Link
+          href={account.role === ROLE.CLIENT ? "/me" : "/"}
+          className="text-sm text-muted hover:text-foreground"
+        >
+          ← Zur Übersicht
+        </Link>
+      </div>
     </main>
   );
 }

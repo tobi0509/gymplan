@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
+import { requireTrainer } from "@/lib/auth";
 import PlanBuilderClient from "./PlanBuilderClient";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,7 @@ export default async function PlanPage({
 }: {
   params: { id: string };
 }) {
+  await requireTrainer();
   const plan = await prisma.plan.findUnique({
     where: { id: params.id },
     include: {

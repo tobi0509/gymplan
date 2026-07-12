@@ -10,6 +10,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- Accounts & Login -----------------------------------------------------
+
+model Account {
+  id           String        @id @default(cuid())
+  username     String        @unique
+  passwordHash String // scrypt: salt:hash (hex)
+  role         String // TRAINER | CLIENT
+  displayName  String // Anzeigename; bei Kunden = clientName in Sessions
+  createdAt    DateTime      @default(now())
+  authSessions AuthSession[]
+  plans        Plan[] // zugewiesene Pläne (nur Kunden)
+}
+
+model AuthSession {
+  token     String   @id
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
 // --- Muskeln & Übungen --------------------------------------------------
 
 model Muscle {
@@ -27,6 +48,7 @@ model Exercise {
   equipment String // KETTLEBELL | DUMBBELL | BARBELL | BODYWEIGHT | MACHINE | CABLE | OTHER
   category  String? // z.B. "Push", "Pull", "Legs"
   notes     String?
+  imageUrl  String? // Beispielbild/Anleitung der Übung
   muscles   ExerciseMuscle[]
   planItems PlanExercise[]
   createdAt DateTime         @default(now())
@@ -47,13 +69,15 @@ model ExerciseMuscle {
 // --- Pläne --------------------------------------------------------------
 
 model Plan {
-  id         String           @id @default(cuid())
-  name       String
-  ownerName  String // Trainer / Ersteller
-  shareToken String           @unique @default(cuid())
-  createdAt  DateTime         @default(now())
-  exercises  PlanExercise[]
-  sessions   WorkoutSession[]
+  id           String           @id @default(cuid())
+  name         String
+  ownerName    String // Trainer / Ersteller
+  shareToken   String           @unique @default(cuid())
+  assignedTo   Account?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId String?
+  createdAt    DateTime         @default(now())
+  exercises    PlanExercise[]
+  sessions     WorkoutSession[]
 }
 
 model PlanExercise {

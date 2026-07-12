@@ -1,10 +1,12 @@
 import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
+import { requireTrainer } from "@/lib/auth";
 import ExercisesClient from "./ExercisesClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExercisesPage() {
+  await requireTrainer();
   const [exercises, muscles] = await Promise.all([
     prisma.exercise.findMany({
       orderBy: { name: "asc" },
@@ -30,6 +32,7 @@ export default async function ExercisesPage() {
             name: e.name,
             equipment: e.equipment,
             category: e.category,
+            imageUrl: e.imageUrl,
             muscles: e.muscles.map((m) => ({
               muscleId: m.muscleId,
               percentage: m.percentage,

@@ -1,6 +1,45 @@
 import { PrismaClient } from "@prisma/client";
+import crypto from "crypto";
 
 const prisma = new PrismaClient();
+
+// Muss zum Format in lib/auth.ts passen (salt:hash, scrypt 64 Byte).
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+// Trainer-Zugang aus Env anlegen (nur wenn er noch nicht existiert).
+async function ensureTrainerAccount() {
+  const username = (process.env.TRAINER_USERNAME || "trainer").toLowerCase();
+  const password = process.env.TRAINER_PASSWORD;
+
+  const existing = await prisma.account.findUnique({ where: { username } });
+  if (existing) return;
+
+  if (!password) {
+    const anyTrainer = await prisma.account.findFirst({
+      where: { role: "TRAINER" },
+    });
+    if (!anyTrainer) {
+      console.warn(
+        "Seed: Kein Trainer-Account vorhanden und TRAINER_PASSWORD nicht gesetzt – Login ist so nicht möglich!",
+      );
+    }
+    return;
+  }
+
+  await prisma.account.create({
+    data: {
+      username,
+      displayName: "Trainer",
+      role: "TRAINER",
+      passwordHash: hashPassword(password),
+    },
+  });
+  console.log(`Seed: Trainer-Account "${username}" angelegt.`);
+}
 
 // --- Muskeln ------------------------------------------------------------
 // svgKey mappt auf die benannten Pfade in components/BodyMap.tsx
@@ -126,6 +165,8 @@ async function main() {
       });
     }
   }
+
+  await ensureTrainerAccount();
 
   console.log("Seed fertig.");
 }

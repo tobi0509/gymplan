@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { logout } from "@/app/login/actions";
 
 export default function TrainerNav() {
   return (
@@ -23,6 +24,20 @@ export default function TrainerNav() {
           >
             Übungen
           </Link>
+          <Link
+            href="/clients"
+            className="rounded-lg px-3 py-1.5 text-muted hover:bg-surface hover:text-foreground"
+          >
+            Kunden
+          </Link>
+          <form action={logout}>
+            <button
+              type="submit"
+              className="rounded-lg px-3 py-1.5 text-muted hover:bg-surface hover:text-foreground"
+            >
+              Abmelden
+            </button>
+          </form>
         </nav>
       </div>
     </header>
