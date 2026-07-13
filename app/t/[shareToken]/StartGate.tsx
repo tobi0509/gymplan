@@ -1,17 +1,34 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function StartGate({
   shareToken,
+  planId,
   disabled,
   clientName,
 }: {
   shareToken: string;
+  planId: string;
   disabled: boolean;
   clientName: string;
 }) {
   const router = useRouter();
+  // Läuft noch ein angefangenes Training für diesen Plan? (siehe SessionFlowClient)
+  const [hasSaved, setHasSaved] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`gymplan.session.${planId}`);
+      if (raw) {
+        const s = JSON.parse(raw);
+        setHasSaved(Boolean(s?.sessionId) && s?.phase !== "done");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [planId]);
 
   return (
     <div className="card space-y-3">
@@ -23,8 +40,17 @@ export default function StartGate({
         onClick={() => router.push(`/t/${shareToken}/session`)}
         disabled={disabled}
       >
-        {disabled ? "Kein Training verfügbar" : "Training starten"}
+        {disabled
+          ? "Kein Training verfügbar"
+          : hasSaved
+            ? "▶ Training fortsetzen"
+            : "Training starten"}
       </button>
+      {hasSaved && (
+        <p className="text-center text-xs text-muted">
+          Du hast ein angefangenes Training – dein Zwischenstand ist gesichert.
+        </p>
+      )}
     </div>
   );
 }

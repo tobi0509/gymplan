@@ -110,6 +110,7 @@ export default async function ClientPlanPage({
 
       <StartGate
         shareToken={params.shareToken}
+        planId={plan.id}
         disabled={plan.exercises.length === 0}
         clientName={account.displayName}
       />

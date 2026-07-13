@@ -30,15 +30,32 @@ export default async function ClientsPage() {
   const proto = host.startsWith("localhost") ? "http" : "https";
   const loginUrl = host ? `${proto}://${host}/login` : "/login";
 
-  // Namen der Kunden für Sessions-Zählung
-  const sessionCounts = await prisma.workoutSession.groupBy({
+  // Trainings-Aktivität pro Kunde (Anzahl + letztes Training)
+  const sessionStats = await prisma.workoutSession.groupBy({
     by: ["clientName"],
     where: { status: "COMPLETED" },
     _count: { _all: true },
+    _max: { startedAt: true },
   });
-  const countByName = new Map(
-    sessionCounts.map((s) => [s.clientName, s._count._all]),
+  const statsByName = new Map(
+    sessionStats.map((s) => [
+      s.clientName,
+      { count: s._count._all, last: s._max.startedAt },
+    ]),
   );
+
+  // "vor X Tagen"-Label + Warnstufe (>14 Tage oder nie = rot, >7 Tage = gelb)
+  function activity(last: Date | null | undefined) {
+    if (!last) {
+      return { label: "Noch kein Training", tone: "text-danger" };
+    }
+    const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+    const label =
+      days === 0 ? "Heute trainiert" : days === 1 ? "Gestern trainiert" : `Vor ${days} Tagen trainiert`;
+    const tone =
+      days > 14 ? "text-danger" : days > 7 ? "text-warn" : "text-accent";
+    return { label, tone };
+  }
 
   return (
     <>
@@ -58,7 +75,10 @@ export default async function ClientsPage() {
                 Noch keine Kunden. Lege rechts den ersten Zugang an.
               </div>
             )}
-            {clients.map((c) => (
+            {clients.map((c) => {
+              const stats = statsByName.get(c.displayName);
+              const act = activity(stats?.last);
+              return (
               <div key={c.id} className="card space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -66,7 +86,10 @@ export default async function ClientsPage() {
                     <div className="text-xs text-muted">
                       Benutzername: <span className="font-mono">{c.username}</span>
                       {" · "}
-                      {countByName.get(c.displayName) ?? 0} Trainings
+                      {stats?.count ?? 0} Trainings
+                    </div>
+                    <div className={`mt-0.5 text-xs font-medium ${act.tone}`}>
+                      {act.label}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -125,7 +148,8 @@ export default async function ClientsPage() {
                   </button>
                 </form>
               </div>
-            ))}
+              );
+            })}
           </section>
 
           <aside>

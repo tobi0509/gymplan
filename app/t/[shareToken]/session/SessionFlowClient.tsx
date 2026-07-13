@@ -20,8 +20,21 @@ type Ex = {
   targetWeight: number | null;
 };
 
+type LastLog = { weight: number | null; reps: number | null };
 type Phase = "motivation" | "workout" | "exertion" | "done";
-type LogVal = { weight: string; reps: string };
+type LogVal = { weight: string; reps: string; done?: boolean };
+
+// Zwischenstand pro Plan sichern, damit ein Reload/Tab-Wechsel nichts verliert.
+const saveKey = (planId: string) => `gymplan.session.${planId}`;
+
+type SavedState = {
+  sessionId: string;
+  phase: Phase;
+  exIdx: number;
+  logs: Record<string, Record<number, LogVal>>;
+  motivation: number;
+  exertion: number;
+};
 
 export default function SessionFlowClient({
   shareToken,
@@ -29,40 +42,117 @@ export default function SessionFlowClient({
   planName,
   clientName,
   exercises,
+  lastLogs,
 }: {
   shareToken: string;
   planId: string;
   planName: string;
   clientName: string;
   exercises: Ex[];
+  lastLogs: Record<string, Record<number, LastLog>>;
 }) {
   const router = useRouter();
   const name = clientName;
-  const [phase, setPhase] = useState<Phase>("motivation");
-  const [motivation, setMotivation] = useState(12);
-  const [exertion, setExertion] = useState(12);
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [exIdx, setExIdx] = useState(0);
+
+  // Gespeicherten Zwischenstand (falls vorhanden) synchron beim ersten Render laden
+  const [restored] = useState<SavedState | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem(saveKey(planId));
+      if (!raw) return null;
+      const s = JSON.parse(raw) as SavedState;
+      return s.sessionId && s.phase !== "done" ? s : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [phase, setPhase] = useState<Phase>(restored?.phase ?? "motivation");
+  const [motivation, setMotivation] = useState(restored?.motivation ?? 12);
+  const [exertion, setExertion] = useState(restored?.exertion ?? 12);
+  const [sessionId, setSessionId] = useState<string | null>(
+    restored?.sessionId ?? null,
+  );
+  const [exIdx, setExIdx] = useState(restored?.exIdx ?? 0);
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   // GainsFire-Popup beim Abschluss-Rating
   const [funny, setFunny] = useState<{ text: string; weight: number } | null>(null);
   const [funnyOpen, setFunnyOpen] = useState(false);
 
-  // logs[planExerciseId][setNumber] = { weight, reps }
+  // logs[planExerciseId][setNumber] = { weight, reps, done }
+  // Vorbelegung: Werte vom letzten Training, sonst Plan-Zielwerte.
   const [logs, setLogs] = useState<Record<string, Record<number, LogVal>>>(() => {
+    if (restored) return restored.logs;
     const init: Record<string, Record<number, LogVal>> = {};
     for (const ex of exercises) {
       init[ex.planExerciseId] = {};
       for (let s = 1; s <= ex.sets; s++) {
+        const last = lastLogs[ex.planExerciseId]?.[s];
         init[ex.planExerciseId][s] = {
-          weight: ex.targetWeight != null ? String(ex.targetWeight) : "",
-          reps: ex.targetReps != null ? String(ex.targetReps) : "",
+          weight:
+            last?.weight != null
+              ? String(last.weight)
+              : ex.targetWeight != null
+                ? String(ex.targetWeight)
+                : "",
+          reps:
+            last?.reps != null
+              ? String(last.reps)
+              : ex.targetReps != null
+                ? String(ex.targetReps)
+                : "",
         };
       }
     }
     return init;
   });
+
+  // Zwischenstand fortlaufend sichern (ab Workout-Phase, solange nicht fertig)
+  useEffect(() => {
+    if (!sessionId || phase === "done") return;
+    const state: SavedState = { sessionId, phase, exIdx, logs, motivation, exertion };
+    try {
+      localStorage.setItem(saveKey(planId), JSON.stringify(state));
+    } catch {
+      /* Speicher voll o.ä. – Recovery ist optional */
+    }
+  }, [sessionId, phase, exIdx, logs, motivation, exertion, planId]);
+
+  function clearSaved() {
+    try {
+      localStorage.removeItem(saveKey(planId));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Bildschirm während des Trainings wach halten (Wake Lock, wo unterstützt)
+  useEffect(() => {
+    if (phase !== "workout") return;
+    let lock: { release: () => Promise<void> } | null = null;
+    let active = true;
+    async function acquire() {
+      try {
+        const wl = (navigator as Navigator & {
+          wakeLock?: { request: (t: "screen") => Promise<{ release: () => Promise<void> }> };
+        }).wakeLock;
+        if (wl && active) lock = await wl.request("screen");
+      } catch {
+        /* nicht unterstützt oder verweigert – kein Problem */
+      }
+    }
+    acquire();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") acquire();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisible);
+      lock?.release().catch(() => {});
+    };
+  }, [phase]);
 
   async function beginWorkout() {
     setBusy(true);
@@ -72,10 +162,20 @@ export default function SessionFlowClient({
     setPhase("workout");
   }
 
-  function setLog(peId: string, setNo: number, field: keyof LogVal, value: string) {
+  function setLog(peId: string, setNo: number, field: "weight" | "reps", value: string) {
     setLogs((prev) => ({
       ...prev,
       [peId]: { ...prev[peId], [setNo]: { ...prev[peId][setNo], [field]: value } },
+    }));
+  }
+
+  function toggleDone(peId: string, setNo: number) {
+    setLogs((prev) => ({
+      ...prev,
+      [peId]: {
+        ...prev[peId],
+        [setNo]: { ...prev[peId][setNo], done: !prev[peId][setNo].done },
+      },
     }));
   }
 
@@ -125,11 +225,13 @@ export default function SessionFlowClient({
     setBusy(true);
     await finishSession(sessionId, exertion, collectLogs());
     setBusy(false);
+    clearSaved();
     setPhase("done");
   }
 
   async function doCancel() {
     if (sessionId) await cancelSession(sessionId);
+    clearSaved();
     router.replace(`/t/${shareToken}`);
   }
 
@@ -240,6 +342,19 @@ export default function SessionFlowClient({
   const ex = exercises[exIdx];
   const isLast = exIdx === exercises.length - 1;
 
+  // "Letztes Mal"-Zusammenfassung für die aktuelle Übung, z.B. "50×10 · 50×8"
+  const lastForEx = lastLogs[ex.planExerciseId];
+  const lastSummary = lastForEx
+    ? Object.keys(lastForEx)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .map((s) => {
+          const l = lastForEx[s];
+          return `${l.weight ?? "–"}×${l.reps ?? "–"}`;
+        })
+        .join(" · ")
+    : null;
+
   return (
     <FlowShell
       title={planName}
@@ -263,20 +378,35 @@ export default function SessionFlowClient({
             {ex.targetReps ? ` × ${ex.targetReps} Wdh.` : ""}
             {ex.targetWeight ? ` · ${ex.targetWeight} kg` : ""}
           </p>
+          {lastSummary && (
+            <p className="mt-0.5 text-sm text-accent">
+              Letztes Mal: {lastSummary}
+            </p>
+          )}
         </div>
 
         {/* Satz-Zeilen */}
         <div className="space-y-2">
-          <div className="grid grid-cols-[2rem_1fr_1fr] gap-2 px-1 text-xs uppercase tracking-wide text-muted">
+          <div className="grid grid-cols-[2rem_1fr_1fr_2.5rem] gap-2 px-1 text-xs uppercase tracking-wide text-muted">
             <span>Satz</span>
             <span>Gewicht (kg)</span>
             <span>Wdh.</span>
+            <span className="text-center">✓</span>
           </div>
           {Array.from({ length: ex.sets }, (_, i) => i + 1).map((s) => {
             const v = logs[ex.planExerciseId][s];
             return (
-              <div key={s} className="grid grid-cols-[2rem_1fr_1fr] items-center gap-2">
-                <span className="grid h-8 w-8 place-items-center rounded-lg bg-surface-2 text-sm font-semibold">
+              <div
+                key={s}
+                className={`grid grid-cols-[2rem_1fr_1fr_2.5rem] items-center gap-2 rounded-xl transition-opacity ${
+                  v.done ? "opacity-60" : ""
+                }`}
+              >
+                <span
+                  className={`grid h-8 w-8 place-items-center rounded-lg text-sm font-semibold ${
+                    v.done ? "bg-accent-soft text-accent" : "bg-surface-2"
+                  }`}
+                >
                   {s}
                 </span>
                 <input
@@ -298,6 +428,18 @@ export default function SessionFlowClient({
                     setLog(ex.planExerciseId, s, "reps", e.target.value)
                   }
                 />
+                <button
+                  type="button"
+                  aria-label={`Satz ${s} ${v.done ? "wieder öffnen" : "abhaken"}`}
+                  onClick={() => toggleDone(ex.planExerciseId, s)}
+                  className={`grid h-10 w-10 place-items-center rounded-xl border text-lg transition-colors ${
+                    v.done
+                      ? "border-accent bg-accent text-black"
+                      : "border-border bg-surface-2 text-muted hover:text-foreground"
+                  }`}
+                >
+                  ✓
+                </button>
               </div>
             );
           })}

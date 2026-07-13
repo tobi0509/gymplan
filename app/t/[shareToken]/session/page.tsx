@@ -29,6 +29,25 @@ export default async function SessionPage({
     notFound();
   }
 
+  // Werte des letzten abgeschlossenen Trainings – zum Vorbelegen der Inputs
+  // und für den "Letztes Mal"-Hinweis.
+  const lastSession = await prisma.workoutSession.findFirst({
+    where: {
+      planId: plan.id,
+      clientName: account.displayName,
+      status: "COMPLETED",
+    },
+    orderBy: { startedAt: "desc" },
+    include: { setLogs: true },
+  });
+  const lastLogs: Record<string, Record<number, { weight: number | null; reps: number | null }>> = {};
+  for (const log of lastSession?.setLogs ?? []) {
+    (lastLogs[log.planExerciseId] ??= {})[log.setNumber] = {
+      weight: log.weight,
+      reps: log.reps,
+    };
+  }
+
   return (
     <SessionFlowClient
       shareToken={params.shareToken}
@@ -43,6 +62,7 @@ export default async function SessionPage({
         targetReps: pe.targetReps,
         targetWeight: pe.targetWeight,
       }))}
+      lastLogs={lastLogs}
     />
   );
 }
