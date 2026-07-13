@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { SESSION_STATUS } from "@/lib/constants";
 import { requireAccount, ROLE } from "@/lib/auth";
+import { FUNNY_SAYINGS, formatSaying } from "@/lib/funnySayings";
 
 // Kunden dürfen nur Pläne nutzen, die ihnen (oder niemandem) zugewiesen sind.
 async function requirePlan(planId: string) {
@@ -52,7 +53,50 @@ async function requireOwnSession(sessionId: string) {
   ) {
     throw new Error("Kein Zugriff auf diese Session");
   }
-  return session;
+  return { account, session };
+}
+
+// Zieht den nächsten GainsFire-Spruch für den eingeloggten Account.
+// Beim ersten Mal wird die Spruchliste pro Account zufällig gemischt und
+// persistiert; danach wird sie der Reihe nach abgearbeitet (zyklisch).
+export async function drawFunnySaying(
+  sessionId: string,
+  totals: { weight: number; reps: number },
+): Promise<{ text: string; weight: number }> {
+  const { account, session } = await requireOwnSession(sessionId);
+
+  let order: number[] = [];
+  try {
+    order = account.funnyOrder ? JSON.parse(account.funnyOrder) : [];
+  } catch {
+    order = [];
+  }
+  if (order.length !== FUNNY_SAYINGS.length) {
+    // Fisher-Yates-Shuffle (auch falls sich die Katalog-Größe mal ändert)
+    order = Array.from({ length: FUNNY_SAYINGS.length }, (_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  }
+
+  const index = order[account.funnyCursor % order.length];
+  await prisma.account.update({
+    where: { id: account.id },
+    data: {
+      funnyOrder: JSON.stringify(order),
+      funnyCursor: (account.funnyCursor + 1) % order.length,
+    },
+  });
+
+  const hours = Math.max(0, Date.now() - session.startedAt.getTime()) / 3.6e6;
+  const weight = Math.round(totals.weight);
+  const text = formatSaying(FUNNY_SAYINGS[index], {
+    weight,
+    count: Math.round(totals.reps),
+    calories: Math.round(250 * hours),
+  });
+  return { text, weight };
 }
 
 export type SetLogInput = {

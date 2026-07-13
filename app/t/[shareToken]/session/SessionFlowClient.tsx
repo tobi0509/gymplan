@@ -7,6 +7,7 @@ import {
   startSession,
   finishSession,
   cancelSession,
+  drawFunnySaying,
   type SetLogInput,
 } from "../actions";
 
@@ -44,6 +45,9 @@ export default function SessionFlowClient({
   const [exIdx, setExIdx] = useState(0);
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // GainsFire-Popup beim Abschluss-Rating
+  const [funny, setFunny] = useState<{ text: string; weight: number } | null>(null);
+  const [funnyOpen, setFunnyOpen] = useState(false);
 
   // logs[planExerciseId][setNumber] = { weight, reps }
   const [logs, setLogs] = useState<Record<string, Record<number, LogVal>>>(() => {
@@ -73,6 +77,32 @@ export default function SessionFlowClient({
       ...prev,
       [peId]: { ...prev[peId], [setNo]: { ...prev[peId][setNo], [field]: value } },
     }));
+  }
+
+  // Gesamtgewicht (Σ Gewicht × Wdh., beide gesetzt – wie totalVolume im Verlauf)
+  // und Gesamt-Wiederholungen der Session aus den Eingaben berechnen.
+  function computeTotals(): { weight: number; reps: number } {
+    let weight = 0;
+    let reps = 0;
+    for (const l of collectLogs()) {
+      if (l.reps != null) reps += l.reps;
+      if (l.weight != null && l.reps != null) weight += l.weight * l.reps;
+    }
+    return { weight, reps };
+  }
+
+  // Beim Übergang zum Abschluss-Rating den Spruch holen (nicht blockierend).
+  function goToExertion() {
+    setPhase("exertion");
+    if (!sessionId) return;
+    drawFunnySaying(sessionId, computeTotals())
+      .then((f) => {
+        setFunny(f);
+        setFunnyOpen(true);
+      })
+      .catch(() => {
+        /* Popup ist optional – Training nie blockieren */
+      });
   }
 
   function collectLogs(): SetLogInput[] {
@@ -129,6 +159,30 @@ export default function SessionFlowClient({
   if (phase === "exertion") {
     return (
       <FlowShell title={planName} subtitle="Fast geschafft">
+        {/* GainsFire-Popup: Gesamtgewicht + Spruch */}
+        {funnyOpen && funny && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+            <div className="card w-full max-w-sm space-y-4 text-center animate-pop-in">
+              <div className="text-4xl">🔥</div>
+              <div>
+                <div className="text-xs uppercase tracking-widest text-muted">
+                  Heute bewegt
+                </div>
+                <div className="mt-1 text-4xl font-black tabular-nums text-accent">
+                  {funny.weight.toLocaleString("de-DE")}
+                  <span className="text-lg font-medium text-muted"> kg</span>
+                </div>
+              </div>
+              <p className="text-sm leading-relaxed">{funny.text}</p>
+              <button
+                className="btn-primary w-full"
+                onClick={() => setFunnyOpen(false)}
+              >
+                Weiter
+              </button>
+            </div>
+          </div>
+        )}
         <div className="card space-y-6">
           <ScaleInput
             label="Wie anstrengend war das Training?"
@@ -261,10 +315,7 @@ export default function SessionFlowClient({
             ← Zurück
           </button>
           {isLast ? (
-            <button
-              className="btn-primary flex-1"
-              onClick={() => setPhase("exertion")}
-            >
+            <button className="btn-primary flex-1" onClick={goToExertion}>
               Training abschließen
             </button>
           ) : (

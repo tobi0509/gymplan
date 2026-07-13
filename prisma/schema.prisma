@@ -18,6 +18,8 @@ model Account {
   passwordHash String // scrypt: salt:hash (hex)
   role         String // TRAINER | CLIENT
   displayName  String // Anzeigename; bei Kunden = clientName in Sessions
+  funnyOrder   String? // JSON-Array gemischter Spruch-Indizes (einmal pro Account erzeugt)
+  funnyCursor  Int           @default(0)
   createdAt    DateTime      @default(now())
   authSessions AuthSession[]
   plans        Plan[] // zugewiesene Pläne (nur Kunden)
