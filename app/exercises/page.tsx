@@ -2,17 +2,19 @@ import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
 import { requireTrainer } from "@/lib/auth";
 import ExercisesClient from "./ExercisesClient";
+import ReimportButton from "./ReimportButton";
 
 export const dynamic = "force-dynamic";
 
 export default async function ExercisesPage() {
   await requireTrainer();
-  const [exercises, muscles] = await Promise.all([
+  const [exercises, muscles, externalCount] = await Promise.all([
     prisma.exercise.findMany({
       orderBy: { name: "asc" },
       include: { muscles: true },
     }),
     prisma.muscle.findMany({ orderBy: { name: "asc" } }),
+    prisma.exercise.count({ where: { imageUrl: { startsWith: "http" } } }),
   ]);
 
   return (
@@ -26,6 +28,7 @@ export default async function ExercisesPage() {
             steuern die Muskel-Abdeckung im Plan.
           </p>
         </div>
+        <ReimportButton count={externalCount} />
         <ExercisesClient
           exercises={exercises.map((e) => ({
             id: e.id,

@@ -98,3 +98,33 @@ export async function deleteExercise(id: string) {
   revalidatePath("/exercises");
   return { ok: true };
 }
+
+// Holt alle noch extern verlinkten Bilder nachträglich auf den Server
+// (z.B. wenn der Download beim Speichern fehlgeschlagen ist).
+export async function reimportExternalImages() {
+  await requireTrainer();
+  const externals = await prisma.exercise.findMany({
+    where: { imageUrl: { startsWith: "http" } },
+    select: { id: true, imageUrl: true },
+  });
+  let imported = 0;
+  const failedNames: string[] = [];
+  for (const ex of externals) {
+    try {
+      const local = await fetchAndStoreImage(ex.imageUrl!);
+      await prisma.exercise.update({
+        where: { id: ex.id },
+        data: { imageUrl: local },
+      });
+      imported++;
+    } catch {
+      const e = await prisma.exercise.findUnique({
+        where: { id: ex.id },
+        select: { name: true },
+      });
+      failedNames.push(e?.name ?? ex.id);
+    }
+  }
+  revalidatePath("/exercises");
+  return { ok: true as const, total: externals.length, imported, failedNames };
+}

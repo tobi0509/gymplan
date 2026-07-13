@@ -8,7 +8,7 @@ services:
       - TRAINER_PASSWORD=${TRAINER_PASSWORD:-}
     volumes:
       - gymplan_data:/data
-      - gymplan_images:/app/public/exercise-images
+      - gymplan_images:/app/data/exercise-images
     networks:
       - proxy
     labels:

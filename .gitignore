@@ -38,3 +38,6 @@ next-env.d.ts
 
 /app/generated/prisma
 /prisma/dev.db
+
+# Laufzeit-Uploads (Übungsbilder)
+/data/

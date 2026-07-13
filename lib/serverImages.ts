@@ -15,6 +15,12 @@ const EXT_BY_TYPE: Record<string, string> = {
 
 export const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
+// WICHTIG: außerhalb von public/ – `next start` liefert nur Dateien aus, die
+// schon beim Build in public/ lagen. Ausgeliefert wird über die Route
+// app/exercise-images/[name]/route.ts (gleicher URL-Pfad).
+export const IMAGE_DIR =
+  process.env.IMAGE_DIR || path.join(process.cwd(), "data", "exercise-images");
+
 export function isHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value.trim());
 }
@@ -27,9 +33,8 @@ export async function storeImage(
   if (!ext) throw new Error("Nur JPG, PNG, WebP oder GIF erlaubt");
   if (buf.length > MAX_BYTES) throw new Error("Bild zu groß (max 5 MB)");
   const name = `${crypto.randomBytes(8).toString("hex")}.${ext}`;
-  const dir = path.join(process.cwd(), "public", "exercise-images");
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, name), buf);
+  await mkdir(IMAGE_DIR, { recursive: true });
+  await writeFile(path.join(IMAGE_DIR, name), buf);
   return `/exercise-images/${name}`;
 }
 
@@ -38,7 +43,16 @@ export async function storeImage(
 export async function fetchAndStoreImage(url: string): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(url.trim(), { redirect: "follow" });
+    // Browser-ähnliche Header: viele Bild-Hosts blocken Requests ohne User-Agent.
+    res = await fetch(url.trim(), {
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        Accept:
+          "image/avif,image/webp,image/png,image/jpeg,image/gif,image/*;q=0.8",
+      },
+    });
   } catch {
     throw new Error("Link nicht erreichbar. Ist die Adresse korrekt?");
   }
