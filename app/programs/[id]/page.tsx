@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import TrainerNav from "@/components/TrainerNav";
+import BodyMap, { toBodyData } from "@/components/BodyMap";
 import { prisma } from "@/lib/prisma";
 import { requireTrainer } from "@/lib/auth";
+import { computeCoverage, TARGET_SESSIONS } from "@/lib/coverage";
 import {
   renameProgram,
   addProgramDay,
@@ -30,6 +32,9 @@ export default async function ProgramDetailPage({
               id: true,
               name: true,
               _count: { select: { exercises: true } },
+              exercises: {
+                include: { exercise: { include: { muscles: true } } },
+              },
             },
           },
         },
@@ -44,6 +49,31 @@ export default async function ProgramDetailPage({
     select: { id: true, name: true },
   });
   const availablePlans = plans.filter((p) => !usedPlanIds.has(p.id));
+
+  // Muskel-Abdeckung in Summe über alle Tage des Programms.
+  // 100 % skaliert mit der Tage-Anzahl, damit die Karte die Wochen-Balance
+  // zeigt statt überall auf 100 % zu stehen.
+  const muscles = await prisma.muscle.findMany({ orderBy: { name: "asc" } });
+  const coverage = computeCoverage(
+    program.days.flatMap((d) =>
+      d.plan.exercises.map((pe) => ({
+        exerciseName: pe.exercise.name,
+        sets: pe.sets,
+        contributions: pe.exercise.muscles.map((m) => ({
+          muscleId: m.muscleId,
+          percentage: m.percentage,
+        })),
+      })),
+    ),
+    TARGET_SESSIONS * Math.max(1, program.days.length),
+  );
+  const bodyData = toBodyData(
+    muscles.map((m) => ({ id: m.id, name: m.name, svgKey: m.svgKey })),
+    coverage,
+  );
+  const legend = muscles
+    .map((m) => ({ id: m.id, name: m.name, pct: coverage[m.id]?.coveragePct ?? 0 }))
+    .sort((a, b) => b.pct - a.pct);
 
   return (
     <>
@@ -137,6 +167,38 @@ export default async function ProgramDetailPage({
             </div>
           ))}
         </section>
+
+        {program.days.length > 0 && (
+          <div className="card mt-6">
+            <h2 className="mb-1 text-lg font-semibold">
+              Trainierte Muskeln (gesamt)
+            </h2>
+            <p className="mb-3 text-xs text-muted">
+              Summe über alle {program.days.length} Tage · 100 % = voll
+              abgedeckt über die Woche.
+            </p>
+            <BodyMap data={bodyData} />
+            <div className="mt-4 space-y-1.5">
+              {legend.map((m) => (
+                <div key={m.id} className="flex items-center gap-2">
+                  <span className="w-32 shrink-0 text-xs">{m.name}</span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
+                    <div
+                      className="h-full rounded-full bg-accent transition-all"
+                      style={{
+                        width: `${Math.round(m.pct)}%`,
+                        opacity: m.pct >= 100 ? 1 : 0.55 + (m.pct / 100) * 0.45,
+                      }}
+                    />
+                  </div>
+                  <span className="w-10 text-right text-xs tabular-nums text-muted">
+                    {Math.round(m.pct)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <form action={addProgramDay} className="card mt-4 flex gap-2">
           <input type="hidden" name="programId" value={program.id} />

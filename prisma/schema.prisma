@@ -181,4 +181,6 @@ model SetLog {
   setNumber      Int
   weight         Float?
   reps           Int?
+  durationMin    Int? // Cardio: Dauer in Minuten
+  intensity      Int? // Cardio: Intensität 1–5
 }

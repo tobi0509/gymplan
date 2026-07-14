@@ -102,6 +102,8 @@ export type SetLogInput = {
   setNumber: number;
   weight: number | null;
   reps: number | null;
+  durationMin: number | null;
+  intensity: number | null;
 };
 
 export async function finishSession(
@@ -110,7 +112,9 @@ export async function finishSession(
   logs: SetLogInput[],
 ) {
   await requireOwnSession(sessionId);
-  const valid = logs.filter((l) => l.weight != null || l.reps != null);
+  const valid = logs.filter(
+    (l) => l.weight != null || l.reps != null || l.durationMin != null,
+  );
   if (valid.length) {
     await prisma.setLog.createMany({
       data: valid.map((l) => ({
@@ -119,6 +123,11 @@ export async function finishSession(
         setNumber: l.setNumber,
         weight: l.weight,
         reps: l.reps,
+        durationMin: l.durationMin,
+        intensity:
+          l.intensity != null
+            ? Math.min(5, Math.max(1, Math.round(l.intensity)))
+            : null,
       })),
     });
   }
@@ -153,7 +162,13 @@ export type HistorySession = {
   exercises: {
     name: string;
     topWeight: number | null;
-    sets: { setNumber: number; weight: number | null; reps: number | null }[];
+    sets: {
+      setNumber: number;
+      weight: number | null;
+      reps: number | null;
+      durationMin: number | null;
+      intensity: number | null;
+    }[];
   }[];
 };
 
@@ -199,7 +214,13 @@ export async function getHistory(shareToken: string): Promise<{
       {
         name: string;
         order: number;
-        sets: { setNumber: number; weight: number | null; reps: number | null }[];
+        sets: {
+          setNumber: number;
+          weight: number | null;
+          reps: number | null;
+          durationMin: number | null;
+          intensity: number | null;
+        }[];
       }
     >();
     let totalVolume = 0;
@@ -217,6 +238,8 @@ export async function getHistory(shareToken: string): Promise<{
         setNumber: log.setNumber,
         weight: log.weight,
         reps: log.reps,
+        durationMin: log.durationMin,
+        intensity: log.intensity,
       });
       if (log.weight != null && log.reps != null) {
         totalVolume += log.weight * log.reps;

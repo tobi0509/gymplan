@@ -35,11 +35,24 @@ export default async function SessionPage({
     orderBy: { startedAt: "desc" },
     include: { setLogs: true },
   });
-  const lastLogs: Record<string, Record<number, { weight: number | null; reps: number | null }>> = {};
+  const lastLogs: Record<
+    string,
+    Record<
+      number,
+      {
+        weight: number | null;
+        reps: number | null;
+        durationMin: number | null;
+        intensity: number | null;
+      }
+    >
+  > = {};
   for (const log of lastSession?.setLogs ?? []) {
     (lastLogs[log.planExerciseId] ??= {})[log.setNumber] = {
       weight: log.weight,
       reps: log.reps,
+      durationMin: log.durationMin,
+      intensity: log.intensity,
     };
   }
 
@@ -56,6 +69,7 @@ export default async function SessionPage({
         sets: pe.sets,
         targetReps: pe.targetReps,
         targetWeight: pe.targetWeight,
+        isCardio: (pe.exercise.category ?? "").toLowerCase() === "cardio",
       }))}
       lastLogs={lastLogs}
     />

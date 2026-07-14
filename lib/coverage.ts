@@ -28,8 +28,12 @@ export type MuscleCoverage = {
   contributors: { exerciseName: string; percentage: number }[];
 };
 
+// targetSessions: Session-Äquivalente, die 100 % ergeben. Default = Wochenziel
+// eines einzelnen Plans; für Programme mit mehreren Tagen entsprechend skalieren
+// (z.B. TARGET_SESSIONS × Anzahl Tage), sonst steht schnell alles auf 100 %.
 export function computeCoverage(
   planExercises: PlanExerciseInput[],
+  targetSessions: number = TARGET_SESSIONS,
 ): Record<string, MuscleCoverage> {
   const out: Record<string, MuscleCoverage> = {};
 
@@ -57,7 +61,7 @@ export function computeCoverage(
   for (const entry of Object.values(out)) {
     entry.coveragePct = Math.min(
       100,
-      (entry.sessionScore / TARGET_SESSIONS) * 100,
+      (entry.sessionScore / targetSessions) * 100,
     );
     entry.bucket = bucketFor(entry.coveragePct);
   }

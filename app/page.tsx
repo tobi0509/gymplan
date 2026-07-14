@@ -1,8 +1,8 @@
-import Link from "next/link";
 import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
-import { requireTrainer } from "@/lib/auth";
-import { createPlan, deletePlan } from "./actions";
+import { requireTrainer, ROLE } from "@/lib/auth";
+import { createPlan } from "./actions";
+import PlansListClient from "./PlansListClient";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +14,11 @@ export default async function DashboardPage() {
       _count: { select: { exercises: true, sessions: true } },
       assignedTo: { select: { displayName: true } },
     },
+  });
+  const clients = await prisma.account.findMany({
+    where: { role: ROLE.CLIENT },
+    orderBy: { displayName: "asc" },
+    select: { id: true, displayName: true },
   });
   const exerciseCount = await prisma.exercise.count();
 
@@ -30,51 +35,19 @@ export default async function DashboardPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-[1fr_320px]">
-          {/* Plan-Liste */}
-          <section className="space-y-3">
-            {plans.length === 0 && (
-              <div className="card text-muted">
-                Noch keine Pläne. Erstelle rechts deinen ersten Plan.
-              </div>
-            )}
-            {plans.map((p) => (
-              <div key={p.id} className="card flex items-center justify-between">
-                <div>
-                  <Link
-                    href={`/plans/${p.id}`}
-                    className="text-lg font-semibold hover:text-accent"
-                  >
-                    {p.name}
-                  </Link>
-                  <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted">
-                    <span className="chip">{p._count.exercises} Übungen</span>
-                    <span className="chip">{p._count.sessions} Sessions</span>
-                    <span className="chip">von {p.ownerName}</span>
-                    {p.assignedTo && (
-                      <span className="chip text-accent">
-                        → {p.assignedTo.displayName}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link href={`/plans/${p.id}`} className="btn-ghost">
-                    Öffnen
-                  </Link>
-                  <form action={deletePlan}>
-                    <input type="hidden" name="id" value={p.id} />
-                    <button
-                      className="btn-ghost text-danger"
-                      type="submit"
-                      aria-label="Plan löschen"
-                    >
-                      ✕
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ))}
-          </section>
+          {/* Plan-Liste mit Kunden-Filter */}
+          <PlansListClient
+            plans={plans.map((p) => ({
+              id: p.id,
+              name: p.name,
+              ownerName: p.ownerName,
+              exerciseCount: p._count.exercises,
+              sessionCount: p._count.sessions,
+              assignedToId: p.assignedToId,
+              assignedToName: p.assignedTo?.displayName ?? null,
+            }))}
+            clients={clients}
+          />
 
           {/* Neuer Plan */}
           <aside>

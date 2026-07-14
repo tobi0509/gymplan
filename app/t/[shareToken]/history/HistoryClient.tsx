@@ -142,7 +142,9 @@ export default function HistoryClient({
                           key={st.setNumber}
                           className="rounded-md bg-surface px-2 py-0.5 text-xs tabular-nums text-muted"
                         >
-                          {st.weight ?? "–"}kg × {st.reps ?? "–"}
+                          {st.durationMin != null
+                            ? `${st.durationMin} min · Int. ${st.intensity ?? "–"}`
+                            : `${st.weight ?? "–"}kg × ${st.reps ?? "–"}`}
                         </span>
                       ))}
                     </div>

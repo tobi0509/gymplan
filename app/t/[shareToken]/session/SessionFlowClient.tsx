@@ -18,11 +18,23 @@ type Ex = {
   sets: number;
   targetReps: number | null;
   targetWeight: number | null;
+  isCardio: boolean;
 };
 
-type LastLog = { weight: number | null; reps: number | null };
+type LastLog = {
+  weight: number | null;
+  reps: number | null;
+  durationMin: number | null;
+  intensity: number | null;
+};
 type Phase = "motivation" | "workout" | "exertion" | "done";
-type LogVal = { weight: string; reps: string; done?: boolean };
+type LogVal = {
+  weight: string;
+  reps: string;
+  durationMin: string;
+  intensity: string;
+  done?: boolean;
+};
 
 // Zwischenstand pro Plan sichern, damit ein Reload/Tab-Wechsel nichts verliert.
 const saveKey = (planId: string) => `gymplan.session.${planId}`;
@@ -61,7 +73,18 @@ export default function SessionFlowClient({
       const raw = localStorage.getItem(saveKey(planId));
       if (!raw) return null;
       const s = JSON.parse(raw) as SavedState;
-      return s.sessionId && s.phase !== "done" ? s : null;
+      if (!s.sessionId || s.phase === "done") return null;
+      // Ältere Zwischenstände kennen die Cardio-Felder noch nicht –
+      // fehlende Werte auffüllen, damit die Inputs controlled bleiben.
+      for (const perSet of Object.values(s.logs ?? {})) {
+        for (const v of Object.values(perSet)) {
+          v.weight ??= "";
+          v.reps ??= "";
+          v.durationMin ??= "";
+          v.intensity ??= "";
+        }
+      }
+      return s;
     } catch {
       return null;
     }
@@ -89,20 +112,35 @@ export default function SessionFlowClient({
       init[ex.planExerciseId] = {};
       for (let s = 1; s <= ex.sets; s++) {
         const last = lastLogs[ex.planExerciseId]?.[s];
-        init[ex.planExerciseId][s] = {
-          weight:
-            last?.weight != null
-              ? String(last.weight)
-              : ex.targetWeight != null
-                ? String(ex.targetWeight)
-                : "",
-          reps:
-            last?.reps != null
-              ? String(last.reps)
-              : ex.targetReps != null
-                ? String(ex.targetReps)
-                : "",
-        };
+        init[ex.planExerciseId][s] = ex.isCardio
+          ? {
+              weight: "",
+              reps: "",
+              // targetReps hält bei Cardio-Übungen die Ziel-Minuten
+              durationMin:
+                last?.durationMin != null
+                  ? String(last.durationMin)
+                  : ex.targetReps != null
+                    ? String(ex.targetReps)
+                    : "",
+              intensity: last?.intensity != null ? String(last.intensity) : "",
+            }
+          : {
+              weight:
+                last?.weight != null
+                  ? String(last.weight)
+                  : ex.targetWeight != null
+                    ? String(ex.targetWeight)
+                    : "",
+              reps:
+                last?.reps != null
+                  ? String(last.reps)
+                  : ex.targetReps != null
+                    ? String(ex.targetReps)
+                    : "",
+              durationMin: "",
+              intensity: "",
+            };
       }
     }
     return init;
@@ -162,7 +200,12 @@ export default function SessionFlowClient({
     setPhase("workout");
   }
 
-  function setLog(peId: string, setNo: number, field: "weight" | "reps", value: string) {
+  function setLog(
+    peId: string,
+    setNo: number,
+    field: "weight" | "reps" | "durationMin" | "intensity",
+    value: string,
+  ) {
     setLogs((prev) => ({
       ...prev,
       [peId]: { ...prev[peId], [setNo]: { ...prev[peId][setNo], [field]: value } },
@@ -212,9 +255,25 @@ export default function SessionFlowClient({
       for (let s = 1; s <= ex.sets; s++) {
         const v = perSet[s];
         if (!v) continue;
-        const weight = v.weight === "" ? null : Number(v.weight);
-        const reps = v.reps === "" ? null : Number(v.reps);
-        out.push({ planExerciseId: ex.planExerciseId, setNumber: s, weight, reps });
+        out.push(
+          ex.isCardio
+            ? {
+                planExerciseId: ex.planExerciseId,
+                setNumber: s,
+                weight: null,
+                reps: null,
+                durationMin: v.durationMin === "" ? null : Number(v.durationMin),
+                intensity: v.intensity === "" ? null : Number(v.intensity),
+              }
+            : {
+                planExerciseId: ex.planExerciseId,
+                setNumber: s,
+                weight: v.weight === "" ? null : Number(v.weight),
+                reps: v.reps === "" ? null : Number(v.reps),
+                durationMin: null,
+                intensity: null,
+              },
+        );
       }
     }
     return out;
@@ -342,7 +401,8 @@ export default function SessionFlowClient({
   const ex = exercises[exIdx];
   const isLast = exIdx === exercises.length - 1;
 
-  // "Letztes Mal"-Zusammenfassung für die aktuelle Übung, z.B. "50×10 · 50×8"
+  // "Letztes Mal"-Zusammenfassung für die aktuelle Übung,
+  // z.B. "50×10 · 50×8" bzw. bei Cardio "20 min · Int. 4"
   const lastForEx = lastLogs[ex.planExerciseId];
   const lastSummary = lastForEx
     ? Object.keys(lastForEx)
@@ -350,17 +410,31 @@ export default function SessionFlowClient({
         .sort((a, b) => a - b)
         .map((s) => {
           const l = lastForEx[s];
+          if (l.durationMin != null) {
+            return `${l.durationMin} min · Int. ${l.intensity ?? "–"}`;
+          }
           return `${l.weight ?? "–"}×${l.reps ?? "–"}`;
         })
         .join(" · ")
     : null;
+
+  // Fortschritt = abgehakte Sätze über alle Übungen
+  const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
+  const doneSets = exercises.reduce((sum, e) => {
+    let n = 0;
+    for (let s = 1; s <= e.sets; s++) {
+      if (logs[e.planExerciseId]?.[s]?.done) n++;
+    }
+    return sum + n;
+  }, 0);
+  const progress = totalSets > 0 ? doneSets / totalSets : 0;
 
   return (
     <FlowShell
       title={planName}
       subtitle={`Übung ${exIdx + 1} von ${exercises.length}`}
       onCancel={() => setConfirmCancel(true)}
-      progress={(exIdx) / Math.max(1, exercises.length)}
+      progress={progress}
     >
       <div className="card space-y-4">
         {ex.imageUrl && (
@@ -373,11 +447,18 @@ export default function SessionFlowClient({
         )}
         <div>
           <h2 className="text-2xl font-bold">{ex.name}</h2>
-          <p className="text-sm text-muted">
-            Ziel: {ex.sets} Sätze
-            {ex.targetReps ? ` × ${ex.targetReps} Wdh.` : ""}
-            {ex.targetWeight ? ` · ${ex.targetWeight} kg` : ""}
-          </p>
+          {ex.isCardio ? (
+            <p className="text-sm text-muted">
+              Ziel: {ex.sets > 1 ? `${ex.sets} × ` : ""}
+              {ex.targetReps ?? "–"} min
+            </p>
+          ) : (
+            <p className="text-sm text-muted">
+              Ziel: {ex.sets} Sätze
+              {ex.targetReps ? ` × ${ex.targetReps} Wdh.` : ""}
+              {ex.targetWeight ? ` · ${ex.targetWeight} kg` : ""}
+            </p>
+          )}
           {lastSummary && (
             <p className="mt-0.5 text-sm text-accent">
               Letztes Mal: {lastSummary}
@@ -387,10 +468,16 @@ export default function SessionFlowClient({
 
         {/* Satz-Zeilen */}
         <div className="space-y-2">
-          <div className="grid grid-cols-[2rem_1fr_1fr_2.5rem] gap-2 px-1 text-xs uppercase tracking-wide text-muted">
+          <div
+            className={`grid ${
+              ex.isCardio
+                ? "grid-cols-[2rem_1fr_auto_2.5rem]"
+                : "grid-cols-[2rem_1fr_1fr_2.5rem]"
+            } gap-2 px-1 text-xs uppercase tracking-wide text-muted`}
+          >
             <span>Satz</span>
-            <span>Gewicht (kg)</span>
-            <span>Wdh.</span>
+            <span>{ex.isCardio ? "Minuten" : "Gewicht (kg)"}</span>
+            <span>{ex.isCardio ? "Intensität" : "Wdh."}</span>
             <span className="text-center">✓</span>
           </div>
           {Array.from({ length: ex.sets }, (_, i) => i + 1).map((s) => {
@@ -398,7 +485,11 @@ export default function SessionFlowClient({
             return (
               <div
                 key={s}
-                className={`grid grid-cols-[2rem_1fr_1fr_2.5rem] items-center gap-2 rounded-xl transition-opacity ${
+                className={`grid ${
+                  ex.isCardio
+                    ? "grid-cols-[2rem_1fr_auto_2.5rem]"
+                    : "grid-cols-[2rem_1fr_1fr_2.5rem]"
+                } items-center gap-2 rounded-xl transition-opacity ${
                   v.done ? "opacity-60" : ""
                 }`}
               >
@@ -409,25 +500,66 @@ export default function SessionFlowClient({
                 >
                   {s}
                 </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  className="input"
-                  step={0.5}
-                  value={v.weight}
-                  onChange={(e) =>
-                    setLog(ex.planExerciseId, s, "weight", e.target.value)
-                  }
-                />
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  className="input"
-                  value={v.reps}
-                  onChange={(e) =>
-                    setLog(ex.planExerciseId, s, "reps", e.target.value)
-                  }
-                />
+                {ex.isCardio ? (
+                  <>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      className="input"
+                      value={v.durationMin}
+                      onChange={(e) =>
+                        setLog(ex.planExerciseId, s, "durationMin", e.target.value)
+                      }
+                    />
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          aria-label={`Intensität ${n}`}
+                          onClick={() =>
+                            setLog(
+                              ex.planExerciseId,
+                              s,
+                              "intensity",
+                              v.intensity === String(n) ? "" : String(n),
+                            )
+                          }
+                          className={`grid h-10 w-8 place-items-center rounded-lg border text-sm font-semibold transition-colors ${
+                            v.intensity === String(n)
+                              ? "border-accent bg-accent text-black"
+                              : "border-border bg-surface-2 text-muted hover:text-foreground"
+                          }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      className="input"
+                      step={0.5}
+                      value={v.weight}
+                      onChange={(e) =>
+                        setLog(ex.planExerciseId, s, "weight", e.target.value)
+                      }
+                    />
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      className="input"
+                      value={v.reps}
+                      onChange={(e) =>
+                        setLog(ex.planExerciseId, s, "reps", e.target.value)
+                      }
+                    />
+                  </>
+                )}
                 <button
                   type="button"
                   aria-label={`Satz ${s} ${v.done ? "wieder öffnen" : "abhaken"}`}
@@ -525,11 +657,19 @@ function FlowShell({
         )}
       </div>
       {progress != null && (
-        <div className="mb-5 h-1.5 overflow-hidden rounded-full bg-surface-2">
-          <div
-            className="h-full rounded-full bg-accent transition-all"
-            style={{ width: `${Math.round(progress * 100)}%` }}
-          />
+        <div className="mb-5">
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-muted">Fortschritt</span>
+            <span className="font-semibold tabular-nums text-accent">
+              {Math.round(progress * 100)}%
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+            <div
+              className="h-full rounded-full bg-accent transition-all"
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
+          </div>
         </div>
       )}
       {children}
