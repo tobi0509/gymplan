@@ -2,7 +2,13 @@ import { headers } from "next/headers";
 import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
 import { requireTrainer, ROLE } from "@/lib/auth";
-import { deleteClientAccount, assignPlan, assignProgram } from "./actions";
+import { getTargetWeekStart } from "@/lib/schedule";
+import {
+  deleteClientAccount,
+  assignPlan,
+  assignProgram,
+  assignWeeklyProgram,
+} from "./actions";
 import ClientCreateForm from "./ClientCreateForm";
 import ResetPasswordButton from "./ResetPasswordButton";
 
@@ -36,6 +42,32 @@ export default async function ClientsPage() {
       assignedTo: { select: { displayName: true } },
     },
   });
+
+  // Wochenplanungen der Zielwoche (Frequenz-Wunsch der Kunden)
+  const targetWeekStart = getTargetWeekStart(new Date());
+  const weekSchedules = await prisma.weeklySchedule.findMany({
+    where: { weekStart: targetWeekStart },
+    include: { program: { select: { name: true } } },
+  });
+  const scheduleByAccount = new Map(weekSchedules.map((s) => [s.accountId, s]));
+
+  function describeSchedule(s: (typeof weekSchedules)[number]) {
+    let dayLabels = "";
+    try {
+      const dates = (JSON.parse(s.selectedDays) as string[]).map(
+        (iso) => new Date(iso),
+      );
+      dayLabels = dates
+        .sort((a, b) => a.getTime() - b.getTime())
+        .map((d) =>
+          d.toLocaleDateString("de-DE", { weekday: "short", timeZone: "UTC" }),
+        )
+        .join(", ");
+      return { count: dates.length, dayLabels };
+    } catch {
+      return { count: 0, dayLabels: "" };
+    }
+  }
 
   const host = headers().get("host") || "";
   const proto = host.startsWith("localhost") ? "http" : "https";
@@ -89,6 +121,10 @@ export default async function ClientsPage() {
             {clients.map((c) => {
               const stats = statsByName.get(c.displayName);
               const act = activity(stats?.last);
+              const weekSchedule = scheduleByAccount.get(c.id);
+              const weekInfo = weekSchedule
+                ? describeSchedule(weekSchedule)
+                : null;
               return (
               <div key={c.id} className="card space-y-3">
                 <div className="flex items-start justify-between gap-3">
@@ -150,6 +186,60 @@ export default async function ClientsPage() {
                     <span className="text-xs text-muted">
                       Noch kein Plan oder Programm zugewiesen.
                     </span>
+                  )}
+                </div>
+
+                {/* Wochenplanung des Kunden (Zielwoche) */}
+                <div className="rounded-xl bg-surface-2 px-3 py-2.5">
+                  {weekSchedule && weekInfo && weekInfo.count > 0 ? (
+                    <>
+                      <div className="text-sm">
+                        <span className="font-medium">Wochenplanung:</span>{" "}
+                        <span className="text-accent">
+                          {weekInfo.count}× gewünscht
+                        </span>{" "}
+                        <span className="text-muted">
+                          ({weekInfo.dayLabels})
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted">
+                        Programm: {weekSchedule.program?.name ?? "–"}{" "}
+                        {weekSchedule.programSource === "TRAINER"
+                          ? "(von dir zugewiesen)"
+                          : "(automatisch)"}
+                      </div>
+                      {programs.length > 0 && (
+                        <form
+                          action={assignWeeklyProgram}
+                          className="mt-2 flex gap-2"
+                        >
+                          <input
+                            type="hidden"
+                            name="scheduleId"
+                            value={weekSchedule.id}
+                          />
+                          <select
+                            name="programId"
+                            className="input flex-1"
+                            required
+                          >
+                            <option value="">Anderes Programm…</option>
+                            {programs.map((pr) => (
+                              <option key={pr.id} value={pr.id}>
+                                {pr.name}
+                              </option>
+                            ))}
+                          </select>
+                          <button className="btn-ghost" type="submit">
+                            Für diese Woche
+                          </button>
+                        </form>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted">
+                      Noch keine Wochenplanung abgegeben.
+                    </div>
                   )}
                 </div>
 

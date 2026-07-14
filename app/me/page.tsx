@@ -38,7 +38,7 @@ export default async function MePage({
   const currentWeekStart = startOfWeek(now);
   const targetWeekStart = getTargetWeekStart(now);
 
-  const [plans, program, currentSchedule, targetScheduleCount] =
+  const [plans, program, currentSchedule, targetScheduleCount, pickableProgramCount] =
     await Promise.all([
       prisma.plan.findMany({
         where: { assignedToId: account.id },
@@ -72,6 +72,7 @@ export default async function MePage({
           },
         },
         include: {
+          program: { select: { name: true } },
           entries: {
             orderBy: [{ date: "asc" }, { position: "asc" }],
             include: { plan: { select: { name: true, shareToken: true } } },
@@ -81,10 +82,16 @@ export default async function MePage({
       prisma.weeklySchedule.count({
         where: { accountId: account.id, weekStart: targetWeekStart },
       }),
+      // Wählbare Programme (eigene + Vorlagen) mit mindestens einem Tag
+      prisma.program.count({
+        where: {
+          OR: [{ assignedToId: null }, { assignedToId: account.id }],
+          days: { some: {} },
+        },
+      }),
     ]);
 
-  const unitsCount =
-    program && program.days.length > 0 ? program.days.length : plans.length;
+  const hasSchedulableUnits = pickableProgramCount > 0 || plans.length > 0;
 
   // Sessions der angezeigten Woche für die Erledigt-Häkchen
   const mondayLocal = new Date(
@@ -130,7 +137,8 @@ export default async function MePage({
 
   // Planungs-Banner: Zielwoche noch ungeplant (oder explizit ?plan=1)
   const planningOpen =
-    unitsCount > 0 && (targetScheduleCount === 0 || searchParams.plan === "1");
+    hasSchedulableUnits &&
+    (targetScheduleCount === 0 || searchParams.plan === "1");
   const planningNextWeek = targetWeekStart.getTime() !== currentWeekStart.getTime();
   const todayOffset = Math.round(
     (today.getTime() - targetWeekStart.getTime()) / 86400000,
@@ -180,9 +188,9 @@ export default async function MePage({
                 : "Plane deine Trainingswoche"}
             </h2>
             <p className="text-sm text-muted">
-              An welchen Tagen kannst du trainieren? Deine {unitsCount}{" "}
-              {unitsCount === 1 ? "Einheit wird" : "Einheiten werden"}{" "}
-              automatisch verteilt.
+              An welchen Tagen hast du Zeit zu trainieren? Dein Wochenprogramm
+              wird automatisch passend zu deiner Häufigkeit gewählt und auf die
+              Tage verteilt.
             </p>
           </div>
           <form action={saveWeeklySchedule} className="space-y-3">
@@ -221,7 +229,10 @@ export default async function MePage({
       {/* 7-Tage-Übersicht */}
       {currentSchedule && currentSchedule.entries.length > 0 && (
         <section className="mb-6">
-          <WeekStrip days={stripDays} />
+          <WeekStrip
+            days={stripDays}
+            programName={currentSchedule.program?.name ?? null}
+          />
         </section>
       )}
 

@@ -134,7 +134,100 @@ const EXERCISES: {
   { name: "Beinstrecker", equipment: "MACHINE", category: "Legs", muscles: { Quadrizeps: 100 } },
   { name: "Beinbeuger", equipment: "MACHINE", category: "Legs", muscles: { Beinbizeps: 90, Waden: 10 } },
   { name: "Butterfly (Maschine)", equipment: "MACHINE", category: "Push", muscles: { Brust: 85, Schultern: 15 } },
+
+  // Cardio (Dauer in Minuten als Wdh. eintragen)
+  { name: "Laufband", equipment: "MACHINE", category: "Cardio", muscles: { Quadrizeps: 40, Waden: 30, Beinbizeps: 20, "Gesäß": 10 } },
+  { name: "Radfahren (Ergometer)", equipment: "MACHINE", category: "Cardio", muscles: { Quadrizeps: 55, Waden: 25, Beinbizeps: 20 } },
+  { name: "Rudergerät", equipment: "MACHINE", category: "Cardio", muscles: { Latissimus: 30, Quadrizeps: 25, Beinbizeps: 15, "Unterer Rücken": 15, Bizeps: 15 } },
+  { name: "Crosstrainer", equipment: "MACHINE", category: "Cardio", muscles: { Quadrizeps: 35, "Gesäß": 25, Waden: 20, Schultern: 10, Bizeps: 10 } },
+  { name: "Seilspringen", equipment: "OTHER", category: "Cardio", muscles: { Waden: 50, Quadrizeps: 25, Schultern: 15, Unterarme: 10 } },
 ];
+
+// --- Demo-Programme --------------------------------------------------------
+// Vorlagen für die automatische Wochen-Zuweisung. Werden nur einmalig
+// angelegt (Guard: existiert schon irgendein Programm von "Demo", passiert
+// nichts mehr) – Änderungen des Trainers bleiben also erhalten.
+
+// [Übungsname, Sätze, Ziel-Wdh.]
+type DemoExercise = [string, number, number];
+
+const DEMO_PLANS: { name: string; exercises: DemoExercise[] }[] = [
+  { name: "Ganzkörper A", exercises: [["Kniebeuge (LH)", 3, 8], ["Bankdrücken (LH)", 3, 8], ["Langhantelrudern", 3, 10], ["Schulterdrücken (KH)", 3, 10], ["Plank", 3, 30]] },
+  { name: "Ganzkörper B", exercises: [["Kreuzheben (LH)", 3, 6], ["Schrägbankdrücken (KH)", 3, 10], ["Latzug", 3, 10], ["Beinpresse", 3, 12], ["Crunches", 3, 15]] },
+  { name: "Ganzkörper C", exercises: [["Frontkniebeuge (LH)", 3, 8], ["Liegestütze", 3, 12], ["Rudern sitzend (Kabel)", 3, 12], ["Seitheben (KH)", 3, 12], ["Hängendes Beinheben", 3, 10]] },
+  { name: "Push (Demo)", exercises: [["Bankdrücken (LH)", 4, 8], ["Schrägbankdrücken (KH)", 3, 10], ["Überkopfdrücken (LH)", 3, 8], ["Seitheben (KH)", 3, 12], ["Trizepsdrücken (Kabel)", 3, 12], ["Dips", 3, 10]] },
+  { name: "Pull (Demo)", exercises: [["Kreuzheben (LH)", 4, 6], ["Klimmzüge", 3, 8], ["Langhantelrudern", 3, 10], ["Latzug", 3, 10], ["Bizepscurl (LH)", 3, 10], ["Reverse Fly (KH)", 3, 12]] },
+  { name: "Beine (Demo)", exercises: [["Kniebeuge (LH)", 4, 8], ["Beinpresse", 3, 12], ["Rumänisches Kreuzheben (LH)", 3, 10], ["Beinstrecker", 3, 12], ["Beinbeuger", 3, 12], ["Wadenheben (KH)", 4, 15]] },
+  { name: "Oberkörper A", exercises: [["Bankdrücken (LH)", 4, 8], ["Langhantelrudern", 4, 8], ["Schulterdrücken (KH)", 3, 10], ["Latzug", 3, 10], ["Bizepscurl (KH)", 3, 10], ["Trizepsdrücken (Kabel)", 3, 10]] },
+  { name: "Oberkörper B", exercises: [["Schrägbankdrücken (LH)", 4, 8], ["Klimmzüge", 4, 8], ["Seitheben (KH)", 3, 12], ["Rudern sitzend (Kabel)", 3, 10], ["Hammercurl (KH)", 3, 10], ["Dips", 3, 10]] },
+  { name: "Unterkörper A", exercises: [["Kniebeuge (LH)", 4, 8], ["Rumänisches Kreuzheben (LH)", 3, 10], ["Beinpresse", 3, 12], ["Wadenheben (KH)", 4, 15], ["Crunches", 3, 15]] },
+  { name: "Unterkörper B", exercises: [["Kreuzheben (LH)", 4, 6], ["Ausfallschritte (LH)", 3, 10], ["Beinbeuger", 3, 12], ["Beinstrecker", 3, 12], ["Hängendes Beinheben", 3, 10]] },
+  { name: "Brust (Demo)", exercises: [["Bankdrücken (LH)", 4, 8], ["Schrägbankdrücken (KH)", 3, 10], ["Fliegende (KH)", 3, 12], ["Butterfly (Maschine)", 3, 12], ["Liegestütze", 3, 12]] },
+  { name: "Rücken (Demo)", exercises: [["Kreuzheben (LH)", 4, 6], ["Klimmzüge", 4, 8], ["Langhantelrudern", 3, 10], ["Latzug", 3, 10], ["Rudern sitzend (Kabel)", 3, 12], ["Hyperextensions", 3, 12]] },
+  { name: "Schultern (Demo)", exercises: [["Überkopfdrücken (LH)", 4, 8], ["Schulterdrücken (KH)", 3, 10], ["Seitheben (KH)", 3, 12], ["Seitheben (Kabel)", 3, 12], ["Reverse Fly (KH)", 3, 12]] },
+  { name: "Arme (Demo)", exercises: [["Bizepscurl (LH)", 3, 10], ["Hammercurl (KH)", 3, 10], ["Bizepscurl (Kabel)", 3, 12], ["Trizepsdrücken (Kabel)", 3, 12], ["Trizeps-Kickback (KH)", 3, 12], ["Dips", 3, 10]] },
+  { name: "Cardio A", exercises: [["Laufband", 1, 20], ["Rudergerät", 1, 10], ["Crosstrainer", 1, 10]] },
+  { name: "Cardio B", exercises: [["Radfahren (Ergometer)", 1, 25], ["Seilspringen", 3, 3], ["Crosstrainer", 1, 10]] },
+];
+
+// Reihenfolge = Priorität bei gleicher Tagesanzahl (ältestes gewinnt)
+const DEMO_PROGRAMS: { name: string; days: string[] }[] = [
+  { name: "2er Ganzkörper", days: ["Ganzkörper A", "Ganzkörper B"] },
+  { name: "3er Ganzkörper", days: ["Ganzkörper A", "Ganzkörper B", "Ganzkörper C"] },
+  { name: "3er Push/Pull/Beine", days: ["Push (Demo)", "Pull (Demo)", "Beine (Demo)"] },
+  { name: "3er Hybrid (Ganzkörper + Cardio)", days: ["Ganzkörper A", "Cardio A", "Ganzkörper B"] },
+  { name: "4er Oberkörper/Unterkörper", days: ["Oberkörper A", "Unterkörper A", "Oberkörper B", "Unterkörper B"] },
+  { name: "4er Hybrid (Kraft + Cardio)", days: ["Oberkörper A", "Cardio A", "Unterkörper A", "Cardio B"] },
+  { name: "5er Split", days: ["Brust (Demo)", "Rücken (Demo)", "Beine (Demo)", "Schultern (Demo)", "Arme (Demo)"] },
+  { name: "5er Hybrid (Ganzkörper + Cardio)", days: ["Ganzkörper A", "Cardio A", "Ganzkörper B", "Cardio B", "Ganzkörper C"] },
+];
+
+async function ensureDemoPrograms() {
+  // One-Shot: sobald Demo-Programme existieren, nichts mehr anfassen
+  const existing = await prisma.program.count({ where: { ownerName: "Demo" } });
+  if (existing > 0) return;
+
+  const planIdByName = new Map<string, string>();
+  for (const dp of DEMO_PLANS) {
+    let plan = await prisma.plan.findFirst({ where: { name: dp.name } });
+    if (!plan) {
+      const items: { exerciseId: string; order: number; sets: number; targetReps: number }[] = [];
+      for (let i = 0; i < dp.exercises.length; i++) {
+        const [exName, sets, reps] = dp.exercises[i];
+        const ex = await prisma.exercise.findUnique({ where: { name: exName } });
+        if (!ex) {
+          console.warn(`Seed: Übung "${exName}" fehlt – übersprungen.`);
+          continue;
+        }
+        items.push({ exerciseId: ex.id, order: items.length, sets, targetReps: reps });
+      }
+      plan = await prisma.plan.create({
+        data: { name: dp.name, ownerName: "Demo", exercises: { create: items } },
+      });
+    }
+    planIdByName.set(dp.name, plan.id);
+  }
+
+  const base = Date.now();
+  for (let p = 0; p < DEMO_PROGRAMS.length; p++) {
+    const dp = DEMO_PROGRAMS[p];
+    await prisma.program.create({
+      data: {
+        name: dp.name,
+        ownerName: "Demo",
+        // deterministische Reihenfolge für die Auto-Auswahl
+        createdAt: new Date(base - (DEMO_PROGRAMS.length - p) * 60000),
+        days: {
+          create: dp.days.map((planName, i) => ({
+            planId: planIdByName.get(planName)!,
+            order: i,
+          })),
+        },
+      },
+    });
+  }
+  console.log(`Seed: ${DEMO_PROGRAMS.length} Demo-Programme angelegt.`);
+}
 
 async function main() {
   console.log("Seed: Muskeln …");
@@ -167,6 +260,7 @@ async function main() {
   }
 
   await ensureTrainerAccount();
+  await ensureDemoPrograms();
 
   console.log("Seed fertig.");
 }

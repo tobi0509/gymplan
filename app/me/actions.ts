@@ -9,11 +9,12 @@ import {
   localDateKey,
   addDays,
   distributeUnits,
+  pickProgram,
 } from "@/lib/schedule";
 
-// Verteilt die Einheiten des Kunden auf seine gewählten Wochentage und
-// speichert das Ergebnis als WeeklySchedule (überschreibt eine bestehende
-// Planung derselben Woche).
+// Der Kunde gibt seine verfügbaren Tage an (Anzahl = gewünschte Frequenz).
+// Das Programm mit passender Einheiten-Zahl wird automatisch gewählt
+// (eigenes Programm vor Vorlagen); der Trainer kann es pro Woche übersteuern.
 export async function saveWeeklySchedule(formData: FormData) {
   const account = await requireAccount();
   if (account.role !== ROLE.CLIENT) redirect("/");
@@ -32,17 +33,34 @@ export async function saveWeeklySchedule(formData: FormData) {
     .map((n) => addDays(weekStart, n))
     .filter((d) => d.getTime() >= today.getTime());
 
-  // Einheiten: Tage des neuesten zugewiesenen Programms; Fallback: einzeln
-  // zugewiesene Pläne in Zuweisungsreihenfolge.
-  const program = await prisma.program.findFirst({
-    where: { assignedToId: account.id },
-    orderBy: { createdAt: "desc" },
-    include: { days: { orderBy: { order: "asc" } } },
+  // Wochenprogramm passend zur Frequenz wählen
+  const candidates = await prisma.program.findMany({
+    where: { OR: [{ assignedToId: null }, { assignedToId: account.id }] },
+    include: { _count: { select: { days: true } } },
   });
-  let units: string[];
-  if (program && program.days.length > 0) {
-    units = program.days.map((d) => d.planId);
+  const picked = pickProgram(
+    candidates.map((c) => ({
+      id: c.id,
+      assignedToId: c.assignedToId,
+      createdAt: c.createdAt,
+      unitCount: c._count.days,
+    })),
+    dates.length,
+    account.id,
+  );
+
+  let units: string[] = [];
+  let programId: string | null = null;
+  if (picked) {
+    const days = await prisma.programDay.findMany({
+      where: { programId: picked.id },
+      orderBy: { order: "asc" },
+      select: { planId: true },
+    });
+    units = days.map((d) => d.planId);
+    programId = picked.id;
   } else {
+    // Fallback ohne jedes Programm: einzeln zugewiesene Pläne
     const plans = await prisma.plan.findMany({
       where: { assignedToId: account.id },
       orderBy: { createdAt: "asc" },
@@ -59,8 +77,18 @@ export async function saveWeeklySchedule(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const schedule = await tx.weeklySchedule.upsert({
       where: { accountId_weekStart: { accountId: account.id, weekStart } },
-      update: {},
-      create: { accountId: account.id, weekStart },
+      update: {
+        programId,
+        programSource: "AUTO",
+        selectedDays: JSON.stringify(dates.map((d) => d.toISOString())),
+      },
+      create: {
+        accountId: account.id,
+        weekStart,
+        programId,
+        programSource: "AUTO",
+        selectedDays: JSON.stringify(dates.map((d) => d.toISOString())),
+      },
     });
     await tx.scheduleEntry.deleteMany({ where: { scheduleId: schedule.id } });
     await tx.scheduleEntry.createMany({

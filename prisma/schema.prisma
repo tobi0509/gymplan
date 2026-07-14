@@ -31,13 +31,14 @@ model Account {
 
 // Mehrtägiger Trainingszyklus (z.B. 3er-Split): geordnete Folge von Plänen.
 model Program {
-  id           String       @id @default(cuid())
-  name         String
-  ownerName    String
-  assignedTo   Account?     @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
-  assignedToId String?
-  createdAt    DateTime     @default(now())
-  days         ProgramDay[]
+  id              String           @id @default(cuid())
+  name            String
+  ownerName       String
+  assignedTo      Account?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId    String?
+  createdAt       DateTime         @default(now())
+  days            ProgramDay[]
+  weeklySchedules WeeklySchedule[]
 }
 
 model ProgramDay {
@@ -52,12 +53,16 @@ model ProgramDay {
 }
 
 model WeeklySchedule {
-  id        String          @id @default(cuid())
-  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  accountId String
-  weekStart DateTime // Montag der Woche, als UTC-Mitternacht des lokalen Datums
-  createdAt DateTime        @default(now())
-  entries   ScheduleEntry[]
+  id            String          @id @default(cuid())
+  account       Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId     String
+  weekStart     DateTime // Montag der Woche, als UTC-Mitternacht des lokalen Datums
+  program       Program?        @relation(fields: [programId], references: [id], onDelete: SetNull)
+  programId     String?
+  selectedDays  String          @default("[]") // JSON-Array der gewählten Tages-ISO-Keys (für Redistribution)
+  programSource String          @default("AUTO") // AUTO | TRAINER
+  createdAt     DateTime        @default(now())
+  entries       ScheduleEntry[]
 
   @@unique([accountId, weekStart])
 }

@@ -14,11 +14,24 @@ export type StripDay = {
 };
 
 // 7-Tage-Übersicht der geplanten Trainingswoche (Mo–So).
-export default function WeekStrip({ days }: { days: StripDay[] }) {
+export default function WeekStrip({
+  days,
+  programName,
+}: {
+  days: StripDay[];
+  programName: string | null;
+}) {
   return (
     <div className="card space-y-1.5">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Deine Trainingswoche</h2>
+        <div>
+          <h2 className="text-lg font-semibold">Deine Trainingswoche</h2>
+          {programName && (
+            <p className="text-xs text-muted">
+              Programm dieser Woche: {programName}
+            </p>
+          )}
+        </div>
         <Link href="/me?plan=1" className="btn-ghost text-sm">
           Neu planen
         </Link>

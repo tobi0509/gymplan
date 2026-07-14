@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { distributeUnits } from "@/lib/schedule";
 import {
   requireTrainer,
   requireAccount,
@@ -94,6 +95,59 @@ export async function assignPlan(formData: FormData) {
   await prisma.plan.update({
     where: { id: planId },
     data: { assignedToId: accountId || null },
+  });
+  revalidatePath("/clients");
+}
+
+// Wochen-Override: der Trainer legt für eine bereits abgegebene
+// Wochenplanung ein anderes Programm fest; die Einheiten werden auf die
+// vom Kunden gewählten Tage neu verteilt.
+export async function assignWeeklyProgram(formData: FormData) {
+  await requireTrainer();
+  const scheduleId = String(formData.get("scheduleId") || "");
+  const programId = String(formData.get("programId") || "");
+  if (!scheduleId || !programId) return;
+
+  const schedule = await prisma.weeklySchedule.findUnique({
+    where: { id: scheduleId },
+  });
+  if (!schedule) return;
+  let dates: Date[] = [];
+  try {
+    dates = (JSON.parse(schedule.selectedDays) as string[]).map(
+      (iso) => new Date(iso),
+    );
+  } catch {
+    dates = [];
+  }
+  if (dates.length === 0) return; // alte Planung ohne gespeicherte Tage
+
+  const days = await prisma.programDay.findMany({
+    where: { programId },
+    orderBy: { order: "asc" },
+    select: { planId: true },
+  });
+  if (days.length === 0) return;
+
+  const entries = distributeUnits(
+    days.map((d) => d.planId),
+    dates,
+  );
+
+  await prisma.$transaction(async (tx) => {
+    await tx.weeklySchedule.update({
+      where: { id: scheduleId },
+      data: { programId, programSource: "TRAINER" },
+    });
+    await tx.scheduleEntry.deleteMany({ where: { scheduleId } });
+    await tx.scheduleEntry.createMany({
+      data: entries.map((e) => ({
+        scheduleId,
+        planId: e.planId,
+        date: e.date,
+        position: e.position,
+      })),
+    });
   });
   revalidatePath("/clients");
 }

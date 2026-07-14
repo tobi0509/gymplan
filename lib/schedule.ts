@@ -29,6 +29,47 @@ export function getTargetWeekStart(now: Date): Date {
   return startOfWeek(now);
 }
 
+export type ProgramCandidate = {
+  id: string;
+  assignedToId: string | null;
+  createdAt: Date;
+  unitCount: number;
+};
+
+// Wählt das Wochenprogramm zur gewünschten Frequenz K:
+// 1. exakte Einheiten-Zahl, dem Kunden zugewiesen
+// 2. exakte Einheiten-Zahl, Vorlage (niemandem zugewiesen), älteste zuerst
+// 3. kein exakter Treffer: kleinste Distanz |units − K|, bei Gleichstand
+//    weniger Einheiten, dann eigene vor Vorlagen, dann älteste.
+// Programme anderer Kunden gehören nicht in die Kandidatenliste.
+export function pickProgram(
+  candidates: ProgramCandidate[],
+  k: number,
+  clientAccountId: string,
+): ProgramCandidate | null {
+  const usable = candidates.filter(
+    (c) =>
+      c.unitCount > 0 &&
+      (c.assignedToId == null || c.assignedToId === clientAccountId),
+  );
+  if (usable.length === 0) return null;
+  const score = (c: ProgramCandidate): [number, number, number, number] => [
+    Math.abs(c.unitCount - k),
+    c.unitCount,
+    c.assignedToId === clientAccountId ? 0 : 1,
+    c.createdAt.getTime(),
+  ];
+  return usable.reduce((best, c) => {
+    const a = score(c);
+    const b = score(best);
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] < b[i]) return c;
+      if (a[i] > b[i]) return best;
+    }
+    return best;
+  });
+}
+
 export type DistributedEntry = { date: Date; planId: string; position: number };
 
 // Verteilt die Einheiten eines Zyklus auf die gewählten Tage (aufsteigend
