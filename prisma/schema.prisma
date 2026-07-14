@@ -13,32 +13,66 @@ datasource db {
 // --- Accounts & Login -----------------------------------------------------
 
 model Account {
-  id              String           @id @default(cuid())
-  username        String           @unique
-  passwordHash    String // scrypt: salt:hash (hex)
-  role            String // TRAINER | CLIENT
-  displayName     String // Anzeigename; bei Kunden = clientName in Sessions
-  funnyOrder      String? // JSON-Array gemischter Spruch-Indizes (einmal pro Account erzeugt)
-  funnyCursor     Int              @default(0)
-  createdAt       DateTime         @default(now())
-  authSessions    AuthSession[]
-  plans           Plan[] // zugewiesene Pläne (nur Kunden)
-  programs        Program[] // zugewiesene Programme (nur Kunden)
-  weeklySchedules WeeklySchedule[]
+  id                 String              @id @default(cuid())
+  username           String              @unique
+  passwordHash       String // scrypt: salt:hash (hex)
+  role               String // TRAINER | CLIENT
+  displayName        String // Anzeigename; bei Kunden = clientName in Sessions
+  funnyOrder         String? // JSON-Array gemischter Spruch-Indizes (einmal pro Account erzeugt)
+  funnyCursor        Int                 @default(0)
+  createdAt          DateTime            @default(now())
+  authSessions       AuthSession[]
+  plans              Plan[] // zugewiesene Pläne (nur Kunden)
+  programs           Program[] // zugewiesene Programme (nur Kunden)
+  weeklySchedules    WeeklySchedule[]
+  trainingPreference TrainingPreference?
+  standardWeek       StandardWeek?
+}
+
+// Persistenter Trainingsrhythmus des Kunden (jederzeit änderbar).
+model TrainingPreference {
+  id        String   @id @default(cuid())
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String   @unique
+  weekdays  String   @default("[]") // JSON-Array Int 0–6, Mo=0: Tage mit Zeit
+  frequency Int      @default(3) // gewünschte Einheiten pro Woche
+  updatedAt DateTime @updatedAt
+}
+
+// Vom Trainer zugeteilte Standardwoche: gilt jede Woche, bis sie geändert
+// wird. updatedAt = Zeitpunkt der letzten Zuteilung (für den Abgleich mit
+// TrainingPreference.updatedAt → "Verfügbarkeit geändert"-Hinweis).
+model StandardWeek {
+  id        String              @id @default(cuid())
+  account   Account             @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String              @unique
+  updatedAt DateTime            @updatedAt
+  entries   StandardWeekEntry[]
+}
+
+model StandardWeekEntry {
+  id       String       @id @default(cuid())
+  week     StandardWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  weekId   String
+  plan     Plan         @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId   String
+  weekday  Int // 0=Mo … 6=So
+  position Int          @default(0) // Modell erlaubt mehrere Einheiten/Tag; UI nutzt nur 0
+
+  @@unique([weekId, weekday, position])
 }
 
 // --- Programme & Wochenplanung ---------------------------------------------
 
 // Mehrtägiger Trainingszyklus (z.B. 3er-Split): geordnete Folge von Plänen.
 model Program {
-  id              String           @id @default(cuid())
-  name            String
-  ownerName       String
-  assignedTo      Account?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
-  assignedToId    String?
-  createdAt       DateTime         @default(now())
-  days            ProgramDay[]
-  weeklySchedules WeeklySchedule[]
+  id           String       @id @default(cuid())
+  name         String
+  ownerName    String
+  assignedTo   Account?     @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId String?
+  createdAt    DateTime     @default(now())
+  days         ProgramDay[]
 }
 
 model ProgramDay {
@@ -52,17 +86,15 @@ model ProgramDay {
   @@unique([programId, planId])
 }
 
+// Wochen-Ausnahme: existiert eine Zeile für accountId+weekStart, ersetzen
+// ihre Entries die Standardwoche komplett (0 Entries = trainingsfreie Woche).
 model WeeklySchedule {
-  id            String          @id @default(cuid())
-  account       Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  accountId     String
-  weekStart     DateTime // Montag der Woche, als UTC-Mitternacht des lokalen Datums
-  program       Program?        @relation(fields: [programId], references: [id], onDelete: SetNull)
-  programId     String?
-  selectedDays  String          @default("[]") // JSON-Array der gewählten Tages-ISO-Keys (für Redistribution)
-  programSource String          @default("AUTO") // AUTO | TRAINER
-  createdAt     DateTime        @default(now())
-  entries       ScheduleEntry[]
+  id        String          @id @default(cuid())
+  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String
+  weekStart DateTime // Montag der Woche, als UTC-Mitternacht des lokalen Datums
+  createdAt DateTime        @default(now())
+  entries   ScheduleEntry[]
 
   @@unique([accountId, weekStart])
 }
@@ -125,17 +157,18 @@ model ExerciseMuscle {
 // --- Pläne --------------------------------------------------------------
 
 model Plan {
-  id              String           @id @default(cuid())
-  name            String
-  ownerName       String // Trainer / Ersteller
-  shareToken      String           @unique @default(cuid())
-  assignedTo      Account?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
-  assignedToId    String?
-  createdAt       DateTime         @default(now())
-  exercises       PlanExercise[]
-  sessions        WorkoutSession[]
-  programDays     ProgramDay[]
-  scheduleEntries ScheduleEntry[]
+  id                  String              @id @default(cuid())
+  name                String
+  ownerName           String // Trainer / Ersteller
+  shareToken          String              @unique @default(cuid())
+  assignedTo          Account?            @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId        String?
+  createdAt           DateTime            @default(now())
+  exercises           PlanExercise[]
+  sessions            WorkoutSession[]
+  programDays         ProgramDay[]
+  scheduleEntries     ScheduleEntry[]
+  standardWeekEntries StandardWeekEntry[]
 }
 
 model PlanExercise {

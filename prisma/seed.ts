@@ -144,7 +144,7 @@ const EXERCISES: {
 ];
 
 // --- Demo-Programme --------------------------------------------------------
-// Vorlagen für die automatische Wochen-Zuweisung. Werden nur einmalig
+// Demo-Vorlagen für Pläne & Programme. Werden nur einmalig
 // angelegt (Guard: existiert schon irgendein Programm von "Demo", passiert
 // nichts mehr) – Änderungen des Trainers bleiben also erhalten.
 

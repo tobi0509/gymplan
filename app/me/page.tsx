@@ -5,12 +5,13 @@ import { requireAccount, ROLE } from "@/lib/auth";
 import { logout } from "@/app/login/actions";
 import {
   startOfWeek,
-  getTargetWeekStart,
   localDateKey,
   addDays,
+  parseWeekdays,
 } from "@/lib/schedule";
-import { saveWeeklySchedule } from "./actions";
+import { getEffectiveWeek } from "@/lib/week";
 import WeekStrip, { type StripDay } from "./WeekStrip";
+import PreferenceCard from "./PreferenceCard";
 import ChangePasswordForm from "@/components/ChangePasswordForm";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ function dayLabel(key: Date, opts?: Intl.DateTimeFormatOptions) {
 export default async function MePage({
   searchParams,
 }: {
-  searchParams: { plan?: string; err?: string };
+  searchParams: { err?: string };
 }) {
   const account = await requireAccount();
   if (account.role === ROLE.TRAINER) redirect("/");
@@ -36,62 +37,18 @@ export default async function MePage({
   const now = new Date();
   const today = localDateKey(now);
   const currentWeekStart = startOfWeek(now);
-  const targetWeekStart = getTargetWeekStart(now);
 
-  const [plans, program, currentSchedule, targetScheduleCount, pickableProgramCount] =
-    await Promise.all([
-      prisma.plan.findMany({
-        where: { assignedToId: account.id },
-        orderBy: { createdAt: "desc" },
-        include: { _count: { select: { exercises: true } } },
-      }),
-      // Neuestes zugewiesenes Programm bestimmt den Trainingszyklus
-      prisma.program.findFirst({
-        where: { assignedToId: account.id },
-        orderBy: { createdAt: "desc" },
-        include: {
-          days: {
-            orderBy: { order: "asc" },
-            include: {
-              plan: {
-                select: {
-                  name: true,
-                  shareToken: true,
-                  _count: { select: { exercises: true } },
-                },
-              },
-            },
-          },
-        },
-      }),
-      prisma.weeklySchedule.findUnique({
-        where: {
-          accountId_weekStart: {
-            accountId: account.id,
-            weekStart: currentWeekStart,
-          },
-        },
-        include: {
-          program: { select: { name: true } },
-          entries: {
-            orderBy: [{ date: "asc" }, { position: "asc" }],
-            include: { plan: { select: { name: true, shareToken: true } } },
-          },
-        },
-      }),
-      prisma.weeklySchedule.count({
-        where: { accountId: account.id, weekStart: targetWeekStart },
-      }),
-      // Wählbare Programme (eigene + Vorlagen) mit mindestens einem Tag
-      prisma.program.count({
-        where: {
-          OR: [{ assignedToId: null }, { assignedToId: account.id }],
-          days: { some: {} },
-        },
-      }),
-    ]);
-
-  const hasSchedulableUnits = pickableProgramCount > 0 || plans.length > 0;
+  const [preference, week, plans] = await Promise.all([
+    prisma.trainingPreference.findUnique({
+      where: { accountId: account.id },
+    }),
+    getEffectiveWeek(account.id, currentWeekStart),
+    prisma.plan.findMany({
+      where: { assignedToId: account.id },
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { exercises: true } } },
+    }),
+  ]);
 
   // Sessions der angezeigten Woche für die Erledigt-Häkchen
   const mondayLocal = new Date(
@@ -101,24 +58,25 @@ export default async function MePage({
   );
   const nextMondayLocal = new Date(mondayLocal);
   nextMondayLocal.setDate(nextMondayLocal.getDate() + 7);
-  const weekSessions = currentSchedule
-    ? await prisma.workoutSession.findMany({
-        where: {
-          clientName: account.displayName,
-          status: "COMPLETED",
-          startedAt: { gte: mondayLocal, lt: nextMondayLocal },
-        },
-        select: { planId: true, startedAt: true },
-      })
-    : [];
+  const weekSessions =
+    week.entries.length > 0
+      ? await prisma.workoutSession.findMany({
+          where: {
+            clientName: account.displayName,
+            status: "COMPLETED",
+            startedAt: { gte: mondayLocal, lt: nextMondayLocal },
+          },
+          select: { planId: true, startedAt: true },
+        })
+      : [];
 
   // 7-Tage-Streifen aufbauen
   const stripDays: StripDay[] = Array.from({ length: 7 }, (_, i) => {
     const key = addDays(currentWeekStart, i);
-    const entries = (currentSchedule?.entries ?? [])
+    const entries = week.entries
       .filter((e) => e.date.getTime() === key.getTime())
       .map((e) => ({
-        id: e.id,
+        id: e.key,
         planName: e.plan.name,
         shareToken: e.plan.shareToken,
         done: weekSessions.some(
@@ -135,18 +93,6 @@ export default async function MePage({
     };
   });
 
-  // Planungs-Banner: Zielwoche noch ungeplant (oder explizit ?plan=1)
-  const planningOpen =
-    hasSchedulableUnits &&
-    (targetScheduleCount === 0 || searchParams.plan === "1");
-  const planningNextWeek = targetWeekStart.getTime() !== currentWeekStart.getTime();
-  const todayOffset = Math.round(
-    (today.getTime() - targetWeekStart.getTime()) / 86400000,
-  );
-  const selectableOffsets = Array.from({ length: 7 }, (_, i) => i).filter(
-    (i) => planningNextWeek || i >= todayOffset,
-  );
-
   const sessions = await prisma.workoutSession.findMany({
     where: { clientName: account.displayName, status: "COMPLETED" },
     orderBy: { startedAt: "desc" },
@@ -156,6 +102,9 @@ export default async function MePage({
   const totalSessions = await prisma.workoutSession.count({
     where: { clientName: account.displayName, status: "COMPLETED" },
   });
+
+  const weekdays = preference ? parseWeekdays(preference.weekdays) : [];
+  const waitingForTrainer = preference != null && week.source === "NONE";
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
@@ -178,102 +127,44 @@ export default async function MePage({
         </form>
       </div>
 
-      {/* Wochenplanung */}
-      {planningOpen && (
-        <section className="card mb-6 space-y-3 border-accent/40">
-          <div>
-            <h2 className="text-lg font-semibold">
-              {planningNextWeek
-                ? "Plane deine nächste Woche"
-                : "Plane deine Trainingswoche"}
-            </h2>
-            <p className="text-sm text-muted">
-              An welchen Tagen hast du Zeit zu trainieren? Dein Wochenprogramm
-              wird automatisch passend zu deiner Häufigkeit gewählt und auf die
-              Tage verteilt.
-            </p>
-          </div>
-          <form action={saveWeeklySchedule} className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              {selectableOffsets.map((i) => {
-                const key = addDays(targetWeekStart, i);
-                return (
-                  <label
-                    key={i}
-                    className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm has-[:checked]:border-accent has-[:checked]:text-accent"
-                  >
-                    <input
-                      type="checkbox"
-                      name="day"
-                      value={i}
-                      className="accent-[var(--accent)]"
-                    />
-                    {dayLabel(key, { month: undefined, day: undefined })}{" "}
-                    {key.getUTCDate()}.
-                  </label>
-                );
-              })}
-            </div>
-            {searchParams.err === "days" && (
-              <p className="text-sm text-danger">
-                Bitte wähle mindestens einen Tag.
-              </p>
-            )}
-            <button className="btn-primary w-full" type="submit">
-              Woche planen
-            </button>
-          </form>
-        </section>
-      )}
-
-      {/* 7-Tage-Übersicht */}
-      {currentSchedule && currentSchedule.entries.length > 0 && (
+      {/* Trainingswoche (sobald der Trainer zugeteilt hat) */}
+      {week.entries.length > 0 && (
         <section className="mb-6">
           <WeekStrip
             days={stripDays}
-            programName={currentSchedule.program?.name ?? null}
+            hint={
+              week.source === "OVERRIDE" ? "Diese Woche angepasst" : undefined
+            }
           />
         </section>
       )}
-
-      {/* Programm */}
-      {program && program.days.length > 0 && (
-        <section className="mb-6 space-y-3">
-          <h2 className="text-lg font-semibold">Dein Programm</h2>
-          <div className="card space-y-2">
-            <div>
-              <div className="font-semibold">{program.name}</div>
-              <div className="text-xs text-muted">von {program.ownerName}</div>
-            </div>
-            {program.days.map((d, i) => (
-              <div
-                key={d.id}
-                className="flex items-center justify-between rounded-xl bg-surface-2 px-3 py-2"
-              >
-                <div>
-                  <span className="chip mr-2 text-accent">Tag {i + 1}</span>
-                  <span className="text-sm font-medium">{d.plan.name}</span>
-                  <span className="ml-2 text-xs text-muted">
-                    {d.plan._count.exercises} Übungen
-                  </span>
-                </div>
-                <div className="flex gap-1.5">
-                  <Link
-                    href={`/t/${d.plan.shareToken}/history`}
-                    className="btn-ghost px-2.5"
-                    aria-label={`Fortschritt ${d.plan.name}`}
-                  >
-                    📈
-                  </Link>
-                  <Link href={`/t/${d.plan.shareToken}`} className="btn-ghost">
-                    Ansehen
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
+      {week.source === "OVERRIDE" && week.entries.length === 0 && (
+        <section className="card mb-6 text-muted">
+          Diese Woche ist trainingsfrei. 🏖️
         </section>
       )}
+
+      {/* Warte-Status: Rhythmus gespeichert, Trainer hat noch nicht zugeteilt */}
+      {waitingForTrainer && (
+        <section className="card mb-6 border-accent/40">
+          <div className="text-lg font-semibold">
+            Dein Trainer stellt gerade dein Wochenprogramm zusammen 💪
+          </div>
+          <p className="mt-1 text-sm text-muted">
+            Sobald es fertig ist, siehst du hier deine Trainingswoche.
+          </p>
+        </section>
+      )}
+
+      {/* Trainingsrhythmus: ohne Präferenz prominent, sonst eingeklappt */}
+      <div className="mb-6">
+        <PreferenceCard
+          initialWeekdays={weekdays}
+          initialFrequency={preference?.frequency ?? null}
+          collapsed={preference != null && searchParams.err !== "days"}
+          error={searchParams.err}
+        />
+      </div>
 
       {/* Einzeln zugewiesene Pläne */}
       {plans.length > 0 && (
@@ -297,15 +188,6 @@ export default async function MePage({
               </div>
             </div>
           ))}
-        </section>
-      )}
-
-      {plans.length === 0 && !program && (
-        <section className="mb-6">
-          <div className="card text-muted">
-            Dir ist noch kein Plan zugewiesen. Dein Trainer schaltet ihn für
-            dich frei.
-          </div>
         </section>
       )}
 
