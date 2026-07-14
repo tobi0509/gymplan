@@ -98,6 +98,19 @@ export async function assignPlan(formData: FormData) {
   revalidatePath("/clients");
 }
 
+// Programm einem Kunden zuweisen (leere accountId = Zuweisung entfernen).
+export async function assignProgram(formData: FormData) {
+  await requireTrainer();
+  const programId = String(formData.get("programId") || "");
+  const accountId = String(formData.get("accountId") || "");
+  if (!programId) return;
+  await prisma.program.update({
+    where: { id: programId },
+    data: { assignedToId: accountId || null },
+  });
+  revalidatePath("/clients");
+}
+
 export async function changeOwnPassword(
   _prev: { ok?: boolean; error?: string },
   formData: FormData,

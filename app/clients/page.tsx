@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
 import { requireTrainer, ROLE } from "@/lib/auth";
-import { deleteClientAccount, assignPlan } from "./actions";
+import { deleteClientAccount, assignPlan, assignProgram } from "./actions";
 import ClientCreateForm from "./ClientCreateForm";
 import ResetPasswordButton from "./ResetPasswordButton";
 
@@ -14,7 +14,10 @@ export default async function ClientsPage() {
   const clients = await prisma.account.findMany({
     where: { role: ROLE.CLIENT },
     orderBy: { displayName: "asc" },
-    include: { plans: { select: { id: true, name: true, shareToken: true } } },
+    include: {
+      plans: { select: { id: true, name: true, shareToken: true } },
+      programs: { select: { id: true, name: true } },
+    },
   });
   const plans = await prisma.plan.findMany({
     orderBy: { createdAt: "desc" },
@@ -22,6 +25,14 @@ export default async function ClientsPage() {
       id: true,
       name: true,
       assignedToId: true,
+      assignedTo: { select: { displayName: true } },
+    },
+  });
+  const programs = await prisma.program.findMany({
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
       assignedTo: { select: { displayName: true } },
     },
   });
@@ -107,8 +118,21 @@ export default async function ClientsPage() {
                   </div>
                 </div>
 
-                {/* Zugewiesene Pläne */}
+                {/* Zugewiesene Programme & Pläne */}
                 <div className="flex flex-wrap items-center gap-1.5">
+                  {c.programs.map((pr) => (
+                    <form key={pr.id} action={assignProgram}>
+                      <input type="hidden" name="programId" value={pr.id} />
+                      <input type="hidden" name="accountId" value="" />
+                      <button
+                        className="chip text-accent hover:text-danger"
+                        type="submit"
+                        title="Programm-Zuweisung entfernen"
+                      >
+                        📋 {pr.name} ✕
+                      </button>
+                    </form>
+                  ))}
                   {c.plans.map((p) => (
                     <form key={p.id} action={assignPlan}>
                       <input type="hidden" name="planId" value={p.id} />
@@ -122,12 +146,33 @@ export default async function ClientsPage() {
                       </button>
                     </form>
                   ))}
-                  {c.plans.length === 0 && (
+                  {c.plans.length === 0 && c.programs.length === 0 && (
                     <span className="text-xs text-muted">
-                      Noch kein Plan zugewiesen.
+                      Noch kein Plan oder Programm zugewiesen.
                     </span>
                   )}
                 </div>
+
+                {/* Programm zuweisen */}
+                {programs.length > 0 && (
+                  <form action={assignProgram} className="flex gap-2">
+                    <input type="hidden" name="accountId" value={c.id} />
+                    <select name="programId" className="input flex-1" required>
+                      <option value="">Programm zuweisen…</option>
+                      {programs.map((pr) => (
+                        <option key={pr.id} value={pr.id}>
+                          📋 {pr.name}
+                          {pr.assignedTo
+                            ? ` (bei ${pr.assignedTo.displayName})`
+                            : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="btn-ghost" type="submit">
+                      Zuweisen
+                    </button>
+                  </form>
+                )}
 
                 {/* Plan zuweisen */}
                 <form action={assignPlan} className="flex gap-2">

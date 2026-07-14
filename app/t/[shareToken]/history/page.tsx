@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireAccount, ROLE } from "@/lib/auth";
+import { mayAccessPlan } from "@/lib/access";
 import { getHistory } from "../actions";
 import HistoryClient from "./HistoryClient";
 
@@ -15,16 +16,10 @@ export default async function HistoryPage({
   const account = await requireAccount();
   const plan = await prisma.plan.findUnique({
     where: { shareToken: params.shareToken },
-    select: { name: true, ownerName: true, assignedToId: true },
+    select: { id: true, name: true, ownerName: true, assignedToId: true },
   });
   if (!plan) notFound();
-  if (
-    account.role === ROLE.CLIENT &&
-    plan.assignedToId &&
-    plan.assignedToId !== account.id
-  ) {
-    notFound();
-  }
+  if (!(await mayAccessPlan(account, plan))) notFound();
 
   const { clientName, sessions } = await getHistory(params.shareToken);
 

@@ -6,6 +6,7 @@ services:
       - DATABASE_URL=file:/data/prod.db
       - TRAINER_USERNAME=${TRAINER_USERNAME:-trainer}
       - TRAINER_PASSWORD=${TRAINER_PASSWORD:-}
+      - TZ=Europe/Vienna # Wochenplanung rechnet mit lokalen Kalendertagen
     volumes:
       - gymplan_data:/data
       - gymplan_images:/app/data/exercise-images

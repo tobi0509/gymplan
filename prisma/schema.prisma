@@ -13,16 +13,65 @@ datasource db {
 // --- Accounts & Login -----------------------------------------------------
 
 model Account {
-  id           String        @id @default(cuid())
-  username     String        @unique
-  passwordHash String // scrypt: salt:hash (hex)
-  role         String // TRAINER | CLIENT
-  displayName  String // Anzeigename; bei Kunden = clientName in Sessions
-  funnyOrder   String? // JSON-Array gemischter Spruch-Indizes (einmal pro Account erzeugt)
-  funnyCursor  Int           @default(0)
-  createdAt    DateTime      @default(now())
-  authSessions AuthSession[]
-  plans        Plan[] // zugewiesene Pläne (nur Kunden)
+  id              String           @id @default(cuid())
+  username        String           @unique
+  passwordHash    String // scrypt: salt:hash (hex)
+  role            String // TRAINER | CLIENT
+  displayName     String // Anzeigename; bei Kunden = clientName in Sessions
+  funnyOrder      String? // JSON-Array gemischter Spruch-Indizes (einmal pro Account erzeugt)
+  funnyCursor     Int              @default(0)
+  createdAt       DateTime         @default(now())
+  authSessions    AuthSession[]
+  plans           Plan[] // zugewiesene Pläne (nur Kunden)
+  programs        Program[] // zugewiesene Programme (nur Kunden)
+  weeklySchedules WeeklySchedule[]
+}
+
+// --- Programme & Wochenplanung ---------------------------------------------
+
+// Mehrtägiger Trainingszyklus (z.B. 3er-Split): geordnete Folge von Plänen.
+model Program {
+  id           String       @id @default(cuid())
+  name         String
+  ownerName    String
+  assignedTo   Account?     @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId String?
+  createdAt    DateTime     @default(now())
+  days         ProgramDay[]
+}
+
+model ProgramDay {
+  id        String  @id @default(cuid())
+  program   Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+  programId String
+  plan      Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId    String
+  order     Int     @default(0)
+
+  @@unique([programId, planId])
+}
+
+model WeeklySchedule {
+  id        String          @id @default(cuid())
+  account   Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String
+  weekStart DateTime // Montag der Woche, als UTC-Mitternacht des lokalen Datums
+  createdAt DateTime        @default(now())
+  entries   ScheduleEntry[]
+
+  @@unique([accountId, weekStart])
+}
+
+model ScheduleEntry {
+  id         String         @id @default(cuid())
+  schedule   WeeklySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId String
+  plan       Plan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId     String
+  date       DateTime // Tages-Datum als UTC-Mitternacht des lokalen Datums
+  position   Int            @default(0) // Reihenfolge bei zusammengelegten Einheiten
+
+  @@index([scheduleId, date])
 }
 
 model AuthSession {
@@ -71,15 +120,17 @@ model ExerciseMuscle {
 // --- Pläne --------------------------------------------------------------
 
 model Plan {
-  id           String           @id @default(cuid())
-  name         String
-  ownerName    String // Trainer / Ersteller
-  shareToken   String           @unique @default(cuid())
-  assignedTo   Account?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
-  assignedToId String?
-  createdAt    DateTime         @default(now())
-  exercises    PlanExercise[]
-  sessions     WorkoutSession[]
+  id              String           @id @default(cuid())
+  name            String
+  ownerName       String // Trainer / Ersteller
+  shareToken      String           @unique @default(cuid())
+  assignedTo      Account?         @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId    String?
+  createdAt       DateTime         @default(now())
+  exercises       PlanExercise[]
+  sessions        WorkoutSession[]
+  programDays     ProgramDay[]
+  scheduleEntries ScheduleEntry[]
 }
 
 model PlanExercise {

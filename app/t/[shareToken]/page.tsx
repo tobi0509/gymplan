@@ -2,10 +2,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireAccount, ROLE } from "@/lib/auth";
+import { mayAccessPlan } from "@/lib/access";
 import BodyMap, { toBodyData } from "@/components/BodyMap";
 import { computeCoverage } from "@/lib/coverage";
 import { EQUIPMENT_LABEL, type Equipment } from "@/lib/constants";
 import StartGate from "./StartGate";
+import ExerciseAccordion, {
+  type AccordionExercise,
+} from "./ExerciseAccordion";
 
 export const dynamic = "force-dynamic";
 
@@ -25,14 +29,8 @@ export default async function ClientPlanPage({
     },
   });
   if (!plan) notFound();
-  // Kunden sehen nur eigene (oder nicht zugewiesene) Pläne
-  if (
-    account.role === ROLE.CLIENT &&
-    plan.assignedToId &&
-    plan.assignedToId !== account.id
-  ) {
-    notFound();
-  }
+  // Kunden sehen nur Pläne, auf die sie Zugriff haben (direkt/Programm/frei)
+  if (!(await mayAccessPlan(account, plan))) notFound();
 
   const muscles = await prisma.muscle.findMany({ orderBy: { name: "asc" } });
 
@@ -51,6 +49,27 @@ export default async function ClientPlanPage({
     coverage,
   );
 
+  // Daten fürs Vorschau-Akkordeon serverseitig auflösen
+  const muscleNameById = new Map(muscles.map((m) => [m.id, m.name]));
+  const accordionItems: AccordionExercise[] = plan.exercises.map((pe) => ({
+    id: pe.id,
+    name: pe.exercise.name,
+    equipmentLabel:
+      EQUIPMENT_LABEL[pe.exercise.equipment as Equipment] ??
+      pe.exercise.equipment,
+    category: pe.exercise.category,
+    imageUrl: pe.exercise.imageUrl,
+    sets: pe.sets,
+    targetReps: pe.targetReps,
+    targetWeight: pe.targetWeight,
+    muscles: pe.exercise.muscles
+      .map((m) => ({
+        name: muscleNameById.get(m.muscleId) ?? "?",
+        percentage: m.percentage,
+      }))
+      .sort((a, b) => b.percentage - a.percentage),
+  }));
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <div className="mb-6 text-center">
@@ -68,44 +87,12 @@ export default async function ClientPlanPage({
         <h2 className="mb-3 text-lg font-semibold">
           Übungen ({plan.exercises.length})
         </h2>
-        <div className="space-y-2">
-          {plan.exercises.map((pe, i) => (
-            <div
-              key={pe.id}
-              className="flex items-center justify-between rounded-xl bg-surface-2 px-3 py-2.5"
-            >
-              <div className="flex items-center gap-3">
-                <span className="grid h-6 w-6 place-items-center rounded-lg bg-surface text-xs text-muted">
-                  {i + 1}
-                </span>
-                {pe.exercise.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={pe.exercise.imageUrl}
-                    alt={pe.exercise.name}
-                    className="h-10 w-14 shrink-0 rounded-lg object-cover"
-                  />
-                )}
-                <div>
-                  <div className="text-sm font-medium">{pe.exercise.name}</div>
-                  <div className="text-xs text-muted">
-                    {EQUIPMENT_LABEL[pe.exercise.equipment as Equipment] ??
-                      pe.exercise.equipment}
-                  </div>
-                </div>
-              </div>
-              <div className="text-right text-xs text-muted">
-                {pe.sets} × {pe.targetReps ?? "–"}
-                {pe.targetWeight ? ` · ${pe.targetWeight} kg` : ""}
-              </div>
-            </div>
-          ))}
-          {plan.exercises.length === 0 && (
-            <div className="text-sm text-muted">
-              Dieser Plan enthält noch keine Übungen.
-            </div>
-          )}
-        </div>
+        <ExerciseAccordion items={accordionItems} />
+        {plan.exercises.length === 0 && (
+          <div className="text-sm text-muted">
+            Dieser Plan enthält noch keine Übungen.
+          </div>
+        )}
       </div>
 
       <StartGate

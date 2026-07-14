@@ -19,6 +19,12 @@ export default function TrainerNav() {
             Pläne
           </Link>
           <Link
+            href="/programs"
+            className="rounded-lg px-3 py-1.5 text-muted hover:bg-surface hover:text-foreground"
+          >
+            Programme
+          </Link>
+          <Link
             href="/exercises"
             className="rounded-lg px-3 py-1.5 text-muted hover:bg-surface hover:text-foreground"
           >

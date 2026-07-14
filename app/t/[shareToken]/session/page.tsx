@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireAccount, ROLE } from "@/lib/auth";
+import { requireAccount } from "@/lib/auth";
+import { mayAccessPlan } from "@/lib/access";
 import SessionFlowClient from "./SessionFlowClient";
 
 export const dynamic = "force-dynamic";
@@ -21,13 +22,7 @@ export default async function SessionPage({
     },
   });
   if (!plan) notFound();
-  if (
-    account.role === ROLE.CLIENT &&
-    plan.assignedToId &&
-    plan.assignedToId !== account.id
-  ) {
-    notFound();
-  }
+  if (!(await mayAccessPlan(account, plan))) notFound();
 
   // Werte des letzten abgeschlossenen Trainings – zum Vorbelegen der Inputs
   // und für den "Letztes Mal"-Hinweis.

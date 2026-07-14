@@ -3,18 +3,16 @@
 import { prisma } from "@/lib/prisma";
 import { SESSION_STATUS } from "@/lib/constants";
 import { requireAccount, ROLE } from "@/lib/auth";
+import { mayAccessPlan } from "@/lib/access";
 import { FUNNY_SAYINGS, formatSaying } from "@/lib/funnySayings";
 
-// Kunden dürfen nur Pläne nutzen, die ihnen (oder niemandem) zugewiesen sind.
+// Kunden dürfen nur Pläne nutzen, auf die sie Zugriff haben (direkt
+// zugewiesen, via Programm oder freier Share-Link).
 async function requirePlan(planId: string) {
   const account = await requireAccount();
   const plan = await prisma.plan.findUnique({ where: { id: planId } });
   if (!plan) throw new Error("Plan nicht gefunden");
-  if (
-    account.role === ROLE.CLIENT &&
-    plan.assignedToId &&
-    plan.assignedToId !== account.id
-  ) {
+  if (!(await mayAccessPlan(account, plan))) {
     throw new Error("Kein Zugriff auf diesen Plan");
   }
   return { account, plan };
@@ -176,11 +174,7 @@ export async function getHistory(shareToken: string): Promise<{
   if (account.role === ROLE.TRAINER && plan.assignedTo) {
     clientName = plan.assignedTo.displayName;
   }
-  if (
-    account.role === ROLE.CLIENT &&
-    plan.assignedToId &&
-    plan.assignedToId !== account.id
-  ) {
+  if (!(await mayAccessPlan(account, plan))) {
     return { clientName, sessions: [] };
   }
 
