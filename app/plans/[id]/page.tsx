@@ -42,6 +42,7 @@ export default async function PlanPage({
             exerciseId: pe.exerciseId,
             name: pe.exercise.name,
             equipment: pe.exercise.equipment,
+            category: pe.exercise.category,
             order: pe.order,
             sets: pe.sets,
             targetReps: pe.targetReps,

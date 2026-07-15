@@ -23,7 +23,8 @@ export type PlanExerciseInput = {
 export type MuscleCoverage = {
   muscleId: string;
   sessionScore: number; // Session-Äquivalente
-  coveragePct: number; // 0–100 (gedeckelt)
+  coveragePct: number; // 0–100 (gedeckelt, für Balken/BodyMap)
+  rawPct: number; // ungedeckelt – kann über 100 liegen (zeigt Überlastung)
   bucket: 0 | 1 | 2 | 3; // 0 = keine, 1 = <50 %, 2 = 50–99 %, 3 = 100 %
   contributors: { exerciseName: string; percentage: number }[];
 };
@@ -47,6 +48,7 @@ export function computeCoverage(
           muscleId: c.muscleId,
           sessionScore: 0,
           coveragePct: 0,
+          rawPct: 0,
           bucket: 0,
           contributors: [],
         });
@@ -59,10 +61,8 @@ export function computeCoverage(
   }
 
   for (const entry of Object.values(out)) {
-    entry.coveragePct = Math.min(
-      100,
-      (entry.sessionScore / targetSessions) * 100,
-    );
+    entry.rawPct = (entry.sessionScore / targetSessions) * 100;
+    entry.coveragePct = Math.min(100, entry.rawPct);
     entry.bucket = bucketFor(entry.coveragePct);
   }
 

@@ -9,6 +9,7 @@ import {
   startOfWeek,
   WEEKDAY_LABELS,
 } from "@/lib/schedule";
+import type { PlanExerciseInput } from "@/lib/coverage";
 import WeekEditor, { type PlanOption } from "./WeekEditor";
 
 export const dynamic = "force-dynamic";
@@ -59,12 +60,45 @@ export default async function ClientWeekPage({
   // Pläne fürs Dropdown: dem Kunden zugewiesene zuerst, dann alle anderen
   const allPlans = await prisma.plan.findMany({
     orderBy: [{ name: "asc" }],
-    select: { id: true, name: true, assignedToId: true },
+    select: {
+      id: true,
+      name: true,
+      assignedToId: true,
+      exercises: {
+        select: {
+          sets: true,
+          exercise: {
+            select: {
+              name: true,
+              muscles: { select: { muscleId: true, percentage: true } },
+            },
+          },
+        },
+      },
+    },
   });
   const plans: PlanOption[] = [
     ...allPlans.filter((p) => p.assignedToId === client.id),
     ...allPlans.filter((p) => p.assignedToId !== client.id),
   ].map((p) => ({ id: p.id, name: p.name }));
+
+  // Für die live Muskel-Abdeckung im Editor: Übungen je Plan, unabhängig
+  // von der Auswahl im Dropdown vorbereitet.
+  const planExercisesById: Record<string, PlanExerciseInput[]> = {};
+  for (const p of allPlans) {
+    planExercisesById[p.id] = p.exercises.map((pe) => ({
+      exerciseName: pe.exercise.name,
+      sets: pe.sets,
+      contributions: pe.exercise.muscles.map((m) => ({
+        muscleId: m.muscleId,
+        percentage: m.percentage,
+      })),
+    }));
+  }
+  const muscles = await prisma.muscle.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, svgKey: true },
+  });
 
   // Vorbelegung: Standardwoche bzw. Wochen-Ausnahme (falls vorhanden),
   // Wochen-Tabs ohne Ausnahme werden aus der Standardwoche vorbefüllt.
@@ -109,7 +143,7 @@ export default async function ClientWeekPage({
   return (
     <>
       <TrainerNav />
-      <main className="mx-auto max-w-2xl px-4 py-8">
+      <main className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-6">
           <Link href="/clients" className="text-sm text-muted hover:text-foreground">
             ← Kunden
@@ -124,6 +158,12 @@ export default async function ClientWeekPage({
                 }`
               : "Hat noch keine Verfügbarkeit angegeben."}
           </p>
+          <Link
+            href={`/clients/${client.id}`}
+            className="mt-1 inline-block text-sm text-muted hover:text-accent"
+          >
+            → Zur Kundenübersicht
+          </Link>
         </div>
 
         {/* Tab-Auswahl */}
@@ -141,36 +181,30 @@ export default async function ClientWeekPage({
           ))}
         </div>
 
-        <div className="card">
-          {tab === "standard" ? (
-            <p className="mb-4 text-sm text-muted">
-              Die Standardwoche gilt jede Woche automatisch, bis du sie änderst.
-            </p>
-          ) : (
-            <p className="mb-4 text-sm text-muted">
-              Änderungen hier gelten nur für diese eine Woche — die
-              Standardwoche bleibt unverändert.
-            </p>
-          )}
-          <WeekEditor
-            key={`${tab}-${overrideExists}`}
-            accountId={client.id}
-            mode={tab === "standard" ? "standard" : "week"}
-            weekStartIso={tab === "standard" ? undefined : weekStart.toISOString()}
-            woche={tab === "standard" ? undefined : tab}
-            dayDates={
-              tab === "standard"
-                ? undefined
-                : Array.from({ length: 7 }, (_, d) => dayDate(weekStart, d))
-            }
-            initialPlanByDay={initialPlanByDay}
-            plans={plans}
-            availableWeekdays={weekdays}
-            frequency={preference?.frequency ?? null}
-            overrideExists={overrideExists}
-            saved={saved}
-          />
-        </div>
+        <WeekEditor
+          key={`${tab}-${overrideExists}`}
+          accountId={client.id}
+          mode={tab === "standard" ? "standard" : "week"}
+          woche={tab === "standard" ? undefined : tab}
+          dayDates={
+            tab === "standard"
+              ? undefined
+              : Array.from({ length: 7 }, (_, d) => dayDate(weekStart, d))
+          }
+          introText={
+            tab === "standard"
+              ? "Die Standardwoche gilt jede Woche automatisch, bis du sie änderst."
+              : "Änderungen hier gelten nur für diese eine Woche — die Standardwoche bleibt unverändert."
+          }
+          initialPlanByDay={initialPlanByDay}
+          plans={plans}
+          planExercisesById={planExercisesById}
+          muscles={muscles}
+          availableWeekdays={weekdays}
+          frequency={preference?.frequency ?? null}
+          overrideExists={overrideExists}
+          saved={saved}
+        />
       </main>
     </>
   );

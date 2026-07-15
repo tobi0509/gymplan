@@ -27,6 +27,7 @@ export default function ExerciseAccordion({
     <div className="space-y-2">
       {items.map((ex, i) => {
         const open = openId === ex.id;
+        const isCardio = (ex.category ?? "").toLowerCase() === "cardio";
         return (
           <div key={ex.id} className="overflow-hidden rounded-xl bg-surface-2">
             <button
@@ -54,8 +55,17 @@ export default function ExerciseAccordion({
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-right text-xs text-muted">
-                  {ex.sets} × {ex.targetReps ?? "–"}
-                  {ex.targetWeight ? ` · ${ex.targetWeight} kg` : ""}
+                  {isCardio ? (
+                    <>
+                      {ex.sets > 1 ? `${ex.sets} × ` : ""}
+                      {ex.targetReps ?? "–"} min
+                    </>
+                  ) : (
+                    <>
+                      {ex.sets} × {ex.targetReps ?? "–"}
+                      {ex.targetWeight ? ` · ${ex.targetWeight} kg` : ""}
+                    </>
+                  )}
                 </span>
                 <span
                   className={`text-xs text-muted transition-transform ${
@@ -95,9 +105,18 @@ export default function ExerciseAccordion({
                   <span className="chip">{ex.equipmentLabel}</span>
                   {ex.category && <span className="chip">{ex.category}</span>}
                   <span className="chip text-accent">
-                    Ziel: {ex.sets} Sätze
-                    {ex.targetReps ? ` × ${ex.targetReps} Wdh.` : ""}
-                    {ex.targetWeight ? ` · ${ex.targetWeight} kg` : ""}
+                    {isCardio ? (
+                      <>
+                        Ziel: {ex.sets > 1 ? `${ex.sets} × ` : ""}
+                        {ex.targetReps ?? "–"} min
+                      </>
+                    ) : (
+                      <>
+                        Ziel: {ex.sets} Sätze
+                        {ex.targetReps ? ` × ${ex.targetReps} Wdh.` : ""}
+                        {ex.targetWeight ? ` · ${ex.targetWeight} kg` : ""}
+                      </>
+                    )}
                   </span>
                 </div>
               </div>

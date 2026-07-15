@@ -75,6 +75,24 @@ export default function PlanBuilderClient({
     });
   }
 
+  // Sätze/Wdh. sind Int-Spalten: Dezimal-, 0- und Negativ-Eingaben beim
+  // Verlassen des Felds normalisieren (UI und DB bleiben synchron).
+  function commitSets(id: string, v: number | "") {
+    const n = v === "" ? 1 : Math.max(1, Math.round(v));
+    patch(id, { sets: n });
+    persist(id, { sets: n });
+  }
+  function commitReps(id: string, v: number | "") {
+    const n = v === "" ? null : Math.max(1, Math.round(v));
+    patch(id, { targetReps: n });
+    persist(id, { targetReps: n });
+  }
+  function commitWeight(id: string, v: number | "") {
+    const n = v === "" ? null : Math.max(0, v);
+    patch(id, { targetWeight: n });
+    persist(id, { targetWeight: n });
+  }
+
   function remove(id: string) {
     setItems((prev) => prev.filter((it) => it.id !== id));
     start(async () => {
@@ -148,32 +166,46 @@ export default function PlanBuilderClient({
                 </button>
               </div>
 
-              <div className="mt-3 grid grid-cols-3 gap-3 pl-8">
-                <NumberField
-                  label="Sätze"
-                  value={it.sets}
-                  min={1}
-                  onChange={(v) => patch(it.id, { sets: v === "" ? 0 : v })}
-                  onCommit={(v) => persist(it.id, { sets: v === "" ? 1 : v })}
-                />
-                <NumberField
-                  label="Wdh."
-                  value={it.targetReps ?? ""}
-                  onChange={(v) => patch(it.id, { targetReps: v === "" ? null : v })}
-                  onCommit={(v) =>
-                    persist(it.id, { targetReps: v === "" ? null : v })
-                  }
-                />
-                <NumberField
-                  label="Gewicht (kg)"
-                  value={it.targetWeight ?? ""}
-                  step={0.5}
-                  onChange={(v) => patch(it.id, { targetWeight: v === "" ? null : v })}
-                  onCommit={(v) =>
-                    persist(it.id, { targetWeight: v === "" ? null : v })
-                  }
-                />
-              </div>
+              {(it.category ?? "").toLowerCase() === "cardio" ? (
+                <div className="mt-3 grid grid-cols-2 gap-3 pl-8">
+                  <NumberField
+                    label="Sätze"
+                    value={it.sets}
+                    min={1}
+                    onChange={(v) => patch(it.id, { sets: v === "" ? 0 : v })}
+                    onCommit={(v) => commitSets(it.id, v)}
+                  />
+                  <NumberField
+                    label="Ziel-Minuten"
+                    value={it.targetReps ?? ""}
+                    onChange={(v) => patch(it.id, { targetReps: v === "" ? null : v })}
+                    onCommit={(v) => commitReps(it.id, v)}
+                  />
+                </div>
+              ) : (
+                <div className="mt-3 grid grid-cols-3 gap-3 pl-8">
+                  <NumberField
+                    label="Sätze"
+                    value={it.sets}
+                    min={1}
+                    onChange={(v) => patch(it.id, { sets: v === "" ? 0 : v })}
+                    onCommit={(v) => commitSets(it.id, v)}
+                  />
+                  <NumberField
+                    label="Wdh."
+                    value={it.targetReps ?? ""}
+                    onChange={(v) => patch(it.id, { targetReps: v === "" ? null : v })}
+                    onCommit={(v) => commitReps(it.id, v)}
+                  />
+                  <NumberField
+                    label="Gewicht (kg)"
+                    value={it.targetWeight ?? ""}
+                    step={0.5}
+                    onChange={(v) => patch(it.id, { targetWeight: v === "" ? null : v })}
+                    onCommit={(v) => commitWeight(it.id, v)}
+                  />
+                </div>
+              )}
             </div>
           ))}
 

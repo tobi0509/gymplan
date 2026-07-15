@@ -7,7 +7,7 @@ import { requireTrainer, ROLE } from "@/lib/auth";
 import { addDays, startOfWeek } from "@/lib/schedule";
 
 // Formularfelder: accountId, day-0 … day-6 (planId oder "" = frei),
-// bei Wochen-Ausnahmen zusätzlich weekStart (ISO) und woche (Tab-Slug).
+// bei Wochen-Ausnahmen zusätzlich woche (Tab-Slug "diese"/"naechste").
 
 async function requireClientAccount(accountId: string) {
   const account = await prisma.account.findUnique({ where: { id: accountId } });
@@ -30,16 +30,12 @@ async function readDayEntries(formData: FormData) {
   return entries;
 }
 
-function parseWeekStart(formData: FormData): Date {
-  const raw = String(formData.get("weekStart") || "");
-  const parsed = new Date(raw);
-  if (
-    isNaN(parsed.getTime()) ||
-    startOfWeek(parsed).getTime() !== parsed.getTime()
-  ) {
-    throw new Error("Ungültiger Wochenstart");
-  }
-  return parsed;
+// Wochenstart serverseitig aus dem Tab ableiten — ein Formular, das über den
+// Wochenwechsel offen stand, würde sonst ein Override für die inzwischen
+// vergangene Woche speichern (die Änderung wäre scheinbar spurlos weg).
+function weekStartFromSlug(woche: string): Date {
+  const thisWeek = startOfWeek(new Date());
+  return woche === "naechste" ? addDays(thisWeek, 7) : thisWeek;
 }
 
 export async function saveStandardWeek(formData: FormData) {
@@ -78,8 +74,8 @@ export async function saveWeekOverride(formData: FormData) {
   await requireTrainer();
   const accountId = String(formData.get("accountId") || "");
   await requireClientAccount(accountId);
-  const weekStart = parseWeekStart(formData);
   const woche = String(formData.get("woche") || "diese");
+  const weekStart = weekStartFromSlug(woche);
   const entries = await readDayEntries(formData);
 
   // Auch eine leere Abgabe legt die Ausnahme an (= trainingsfreie Woche).
@@ -111,8 +107,8 @@ export async function clearWeekOverride(formData: FormData) {
   await requireTrainer();
   const accountId = String(formData.get("accountId") || "");
   await requireClientAccount(accountId);
-  const weekStart = parseWeekStart(formData);
   const woche = String(formData.get("woche") || "diese");
+  const weekStart = weekStartFromSlug(woche);
 
   await prisma.weeklySchedule.deleteMany({
     where: { accountId, weekStart },
