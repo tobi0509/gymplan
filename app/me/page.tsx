@@ -143,6 +143,11 @@ export default async function MePage({
           Diese Woche ist trainingsfrei. 🏖️
         </section>
       )}
+      {week.source === "STANDARD" && week.entries.length === 0 && (
+        <section className="card mb-6 text-muted">
+          Dein Trainer hat aktuell keine Trainingstage eingeplant.
+        </section>
+      )}
 
       {/* Warte-Status: Rhythmus gespeichert, Trainer hat noch nicht zugeteilt */}
       {waitingForTrainer && (

@@ -40,6 +40,8 @@ export default function ExercisesClient({
   const [filter, setFilter] = useState<Equipment | "ALL">("ALL");
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState<ExercisePayload | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
 
   const muscleName = useMemo(
     () => Object.fromEntries(muscles.map((m) => [m.id, m.name])),
@@ -53,9 +55,11 @@ export default function ExercisesClient({
   );
 
   function openNew() {
+    setSaveError(null);
     setDraft(EMPTY_DRAFT());
   }
   function openEdit(e: ExRow) {
+    setSaveError(null);
     setDraft({
       id: e.id,
       name: e.name,
@@ -72,15 +76,25 @@ export default function ExercisesClient({
       const res = await saveExercise(draft);
       if (res.ok) {
         setDraft(null);
+        setSaveError(null);
         router.refresh();
+      } else {
+        // z.B. doppelter Name — Eingaben bleiben erhalten
+        setSaveError(res.error ?? "Speichern fehlgeschlagen.");
       }
     });
   }
 
   function remove(id: string) {
     if (!confirm("Übung wirklich löschen?")) return;
+    setListError(null);
     start(async () => {
-      await deleteExercise(id);
+      const res = await deleteExercise(id);
+      if (!res.ok) {
+        // Übung steckt noch in Plänen — Hinweis statt Fehlerseite
+        setListError(res.error);
+        return;
+      }
       router.refresh();
     });
   }
@@ -116,6 +130,10 @@ export default function ExercisesClient({
           </button>
         </div>
       </div>
+
+      {listError && (
+        <div className="card border-danger text-sm text-danger">{listError}</div>
+      )}
 
       {/* Liste */}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -187,6 +205,7 @@ export default function ExercisesClient({
           onSave={save}
           onCancel={() => setDraft(null)}
           pending={pending}
+          saveError={saveError}
         />
       )}
     </div>
@@ -200,6 +219,7 @@ function Editor({
   onSave,
   onCancel,
   pending,
+  saveError,
 }: {
   draft: ExercisePayload;
   setDraft: (d: ExercisePayload) => void;
@@ -207,6 +227,7 @@ function Editor({
   onSave: () => void;
   onCancel: () => void;
   pending: boolean;
+  saveError: string | null;
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -430,6 +451,8 @@ function Editor({
             ))}
           </div>
         </div>
+
+        {saveError && <p className="text-sm text-danger">{saveError}</p>}
 
         <div className="flex justify-end gap-2 pt-1">
           <button className="btn-ghost" onClick={onCancel}>

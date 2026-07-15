@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAccount } from "@/lib/auth";
 import { mayAccessPlan } from "@/lib/access";
@@ -23,6 +23,9 @@ export default async function SessionPage({
   });
   if (!plan) notFound();
   if (!(await mayAccessPlan(account, plan))) notFound();
+  // Ohne Übungen gibt es nichts zu trainieren — die Workout-Phase würde
+  // an exercises[0] scheitern (StartGate sperrt nur den Button, nicht die URL).
+  if (plan.exercises.length === 0) redirect(`/t/${params.shareToken}`);
 
   // Werte des letzten abgeschlossenen Trainings – zum Vorbelegen der Inputs
   // und für den "Letztes Mal"-Hinweis.

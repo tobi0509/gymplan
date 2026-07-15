@@ -26,14 +26,17 @@ export async function mayAccessPlan(
   ]);
   if (standard > 0 || scheduled > 0) return true;
 
-  if (plan.assignedToId != null) return false;
-
   const days = await prisma.programDay.findMany({
     where: { planId: plan.id },
     select: { program: { select: { assignedToId: true } } },
   });
+  // Plan gehört zu einem Programm des Kunden → Zugriff, auch wenn der Plan
+  // (zusätzlich) einem anderen Kunden direkt zugewiesen ist — sonst verliert
+  // der Programm-Kunde den Zugriff auf seine eigene Trainingshistorie.
+  if (days.some((d) => d.program.assignedToId === account.id)) return true;
+
+  if (plan.assignedToId != null) return false;
+
   if (days.length === 0) return true; // in keinem Programm → offener Share-Link
-  return days.some(
-    (d) => d.program.assignedToId === account.id || d.program.assignedToId == null,
-  );
+  return days.some((d) => d.program.assignedToId == null);
 }

@@ -1,9 +1,14 @@
 "use server";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { fetchAndStoreImage, isHttpUrl } from "@/lib/serverImages";
 import { requireTrainer } from "@/lib/auth";
+
+function prismaErrorCode(e: unknown): string | null {
+  return e instanceof Prisma.PrismaClientKnownRequestError ? e.code : null;
+}
 
 // Lädt eine externe Bild-URL herunter und gibt den lokalen Pfad zurück.
 export async function importImage(url: string) {
@@ -51,41 +56,54 @@ export async function saveExercise(payload: ExercisePayload) {
   const muscles = payload.muscles.filter((m) => m.percentage > 0);
   const imageUrl = await normalizeImageUrl(payload.imageUrl);
 
-  if (payload.id) {
-    await prisma.exercise.update({
-      where: { id: payload.id },
-      data: {
-        name,
-        equipment: payload.equipment,
-        category: payload.category || null,
-        imageUrl,
-      },
-    });
-    await prisma.exerciseMuscle.deleteMany({ where: { exerciseId: payload.id } });
-    if (muscles.length) {
-      await prisma.exerciseMuscle.createMany({
-        data: muscles.map((m) => ({
-          exerciseId: payload.id!,
-          muscleId: m.muscleId,
-          percentage: Math.round(m.percentage),
-        })),
+  try {
+    if (payload.id) {
+      // Update + Muskel-Ersatz atomar: bricht es zwischen deleteMany und
+      // createMany ab, wären sonst alle Muskel-Prozente der Übung weg.
+      await prisma.$transaction([
+        prisma.exercise.update({
+          where: { id: payload.id },
+          data: {
+            name,
+            equipment: payload.equipment,
+            category: payload.category || null,
+            imageUrl,
+          },
+        }),
+        prisma.exerciseMuscle.deleteMany({ where: { exerciseId: payload.id } }),
+        ...(muscles.length
+          ? [
+              prisma.exerciseMuscle.createMany({
+                data: muscles.map((m) => ({
+                  exerciseId: payload.id!,
+                  muscleId: m.muscleId,
+                  percentage: Math.round(m.percentage),
+                })),
+              }),
+            ]
+          : []),
+      ]);
+    } else {
+      await prisma.exercise.create({
+        data: {
+          name,
+          equipment: payload.equipment,
+          category: payload.category || null,
+          imageUrl,
+          muscles: {
+            create: muscles.map((m) => ({
+              muscleId: m.muscleId,
+              percentage: Math.round(m.percentage),
+            })),
+          },
+        },
       });
     }
-  } else {
-    await prisma.exercise.create({
-      data: {
-        name,
-        equipment: payload.equipment,
-        category: payload.category || null,
-        imageUrl,
-        muscles: {
-          create: muscles.map((m) => ({
-            muscleId: m.muscleId,
-            percentage: Math.round(m.percentage),
-          })),
-        },
-      },
-    });
+  } catch (e) {
+    if (prismaErrorCode(e) === "P2002") {
+      return { ok: false, error: `Eine Übung namens „${name}“ gibt es schon.` };
+    }
+    throw e;
   }
 
   revalidatePath("/exercises");
@@ -94,9 +112,21 @@ export async function saveExercise(payload: ExercisePayload) {
 
 export async function deleteExercise(id: string) {
   await requireTrainer();
-  await prisma.exercise.delete({ where: { id } });
+  try {
+    await prisma.exercise.delete({ where: { id } });
+  } catch (e) {
+    // onDelete: Restrict — Übung steckt noch in mindestens einem Plan
+    if (prismaErrorCode(e) === "P2003") {
+      const count = await prisma.planExercise.count({ where: { exerciseId: id } });
+      return {
+        ok: false as const,
+        error: `Die Übung wird noch in ${count === 1 ? "einem Plan" : `${count} Plänen`} verwendet — bitte dort zuerst entfernen.`,
+      };
+    }
+    throw e;
+  }
   revalidatePath("/exercises");
-  return { ok: true };
+  return { ok: true as const };
 }
 
 // Holt alle noch extern verlinkten Bilder nachträglich auf den Server

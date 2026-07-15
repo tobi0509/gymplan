@@ -39,6 +39,11 @@ type LogVal = {
 // Zwischenstand pro Plan sichern, damit ein Reload/Tab-Wechsel nichts verliert.
 const saveKey = (planId: string) => `gymplan.session.${planId}`;
 
+// Älterer Zwischenstand wird verworfen: ein Wochen später "fortgesetztes"
+// Training würde sonst mit uralter startedAt-Zeit abgeschlossen (absurde
+// Dauer/Kalorien im Verlauf, Häkchen in der falschen Woche).
+const RESTORE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 type SavedState = {
   sessionId: string;
   phase: Phase;
@@ -46,6 +51,8 @@ type SavedState = {
   logs: Record<string, Record<number, LogVal>>;
   motivation: number;
   exertion: number;
+  clientName?: string; // Gerät kann geteilt sein — Stand gehört zu einem Account
+  savedAt?: number;
 };
 
 export default function SessionFlowClient({
@@ -66,38 +73,13 @@ export default function SessionFlowClient({
   const router = useRouter();
   const name = clientName;
 
-  // Gespeicherten Zwischenstand (falls vorhanden) synchron beim ersten Render laden
-  const [restored] = useState<SavedState | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem(saveKey(planId));
-      if (!raw) return null;
-      const s = JSON.parse(raw) as SavedState;
-      if (!s.sessionId || s.phase === "done") return null;
-      // Ältere Zwischenstände kennen die Cardio-Felder noch nicht –
-      // fehlende Werte auffüllen, damit die Inputs controlled bleiben.
-      for (const perSet of Object.values(s.logs ?? {})) {
-        for (const v of Object.values(perSet)) {
-          v.weight ??= "";
-          v.reps ??= "";
-          v.durationMin ??= "";
-          v.intensity ??= "";
-        }
-      }
-      return s;
-    } catch {
-      return null;
-    }
-  });
-
-  const [phase, setPhase] = useState<Phase>(restored?.phase ?? "motivation");
-  const [motivation, setMotivation] = useState(restored?.motivation ?? 12);
-  const [exertion, setExertion] = useState(restored?.exertion ?? 12);
-  const [sessionId, setSessionId] = useState<string | null>(
-    restored?.sessionId ?? null,
-  );
-  const [exIdx, setExIdx] = useState(restored?.exIdx ?? 0);
+  const [phase, setPhase] = useState<Phase>("motivation");
+  const [motivation, setMotivation] = useState(12);
+  const [exertion, setExertion] = useState(12);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [exIdx, setExIdx] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   // GainsFire-Popup beim Abschluss-Rating
   const [funny, setFunny] = useState<{ text: string; weight: number } | null>(null);
@@ -105,8 +87,7 @@ export default function SessionFlowClient({
 
   // logs[planExerciseId][setNumber] = { weight, reps, done }
   // Vorbelegung: Werte vom letzten Training, sonst Plan-Zielwerte.
-  const [logs, setLogs] = useState<Record<string, Record<number, LogVal>>>(() => {
-    if (restored) return restored.logs;
+  function defaultLogs(): Record<string, Record<number, LogVal>> {
     const init: Record<string, Record<number, LogVal>> = {};
     for (const ex of exercises) {
       init[ex.planExerciseId] = {};
@@ -144,18 +125,78 @@ export default function SessionFlowClient({
       }
     }
     return init;
-  });
+  }
+  const [logs, setLogs] = useState<Record<string, Record<number, LogVal>>>(defaultLogs);
+
+  // Gespeicherten Zwischenstand nach dem Mount wiederherstellen (nicht im
+  // useState-Initializer: der liefe schon beim Hydrieren und erzeugte einen
+  // Hydration-Mismatch zwischen Server- und Client-HTML).
+  useEffect(() => {
+    let s: SavedState | null = null;
+    try {
+      const raw = localStorage.getItem(saveKey(planId));
+      if (raw) s = JSON.parse(raw) as SavedState;
+    } catch {
+      s = null;
+    }
+    if (!s || !s.sessionId || s.phase === "done") return;
+    // Zwischenstand eines anderen Accounts (geteiltes Gerät) oder zu alt →
+    // verwerfen, sonst würde ein fremdes/uraltes Training "fortgesetzt".
+    if (
+      (s.clientName != null && s.clientName !== clientName) ||
+      (s.savedAt != null && Date.now() - s.savedAt > RESTORE_MAX_AGE_MS)
+    ) {
+      clearSaved();
+      return;
+    }
+    // Struktur immer vom aktuellen Plan — hat der Trainer inzwischen
+    // Übungen/Sätze geändert, fehlen sonst Einträge und das Rendering
+    // stürzt ab. Gespeicherte Werte nur über die Defaults legen.
+    const merged = defaultLogs();
+    for (const ex of exercises) {
+      const savedPerSet = s.logs?.[ex.planExerciseId];
+      if (!savedPerSet) continue;
+      for (let set = 1; set <= ex.sets; set++) {
+        const v = savedPerSet[set];
+        if (!v) continue;
+        merged[ex.planExerciseId][set] = {
+          weight: v.weight ?? "",
+          reps: v.reps ?? "",
+          durationMin: v.durationMin ?? "",
+          intensity: v.intensity ?? "",
+          done: v.done,
+        };
+      }
+    }
+    setLogs(merged);
+    setSessionId(s.sessionId);
+    setPhase(s.phase);
+    setMotivation(s.motivation ?? 12);
+    setExertion(s.exertion ?? 12);
+    // exIdx klammern: der Plan kann seit dem Zwischenstand kürzer geworden sein
+    setExIdx(Math.max(0, Math.min(s.exIdx ?? 0, exercises.length - 1)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Zwischenstand fortlaufend sichern (ab Workout-Phase, solange nicht fertig)
   useEffect(() => {
     if (!sessionId || phase === "done") return;
-    const state: SavedState = { sessionId, phase, exIdx, logs, motivation, exertion };
+    const state: SavedState = {
+      sessionId,
+      phase,
+      exIdx,
+      logs,
+      motivation,
+      exertion,
+      clientName,
+      savedAt: Date.now(),
+    };
     try {
       localStorage.setItem(saveKey(planId), JSON.stringify(state));
     } catch {
       /* Speicher voll o.ä. – Recovery ist optional */
     }
-  }, [sessionId, phase, exIdx, logs, motivation, exertion, planId]);
+  }, [sessionId, phase, exIdx, logs, motivation, exertion, planId, clientName]);
 
   function clearSaved() {
     try {
@@ -194,10 +235,17 @@ export default function SessionFlowClient({
 
   async function beginWorkout() {
     setBusy(true);
-    const { sessionId } = await startSession(planId, motivation);
-    setSessionId(sessionId);
-    setBusy(false);
-    setPhase("workout");
+    setActionError(false);
+    try {
+      const { sessionId } = await startSession(planId, motivation);
+      setSessionId(sessionId);
+      setPhase("workout");
+    } catch {
+      // Offline o.ä. — Button wieder freigeben statt auf "Startet…" zu hängen
+      setActionError(true);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function setLog(
@@ -282,14 +330,26 @@ export default function SessionFlowClient({
   async function complete() {
     if (!sessionId) return;
     setBusy(true);
-    await finishSession(sessionId, exertion, collectLogs());
-    setBusy(false);
-    clearSaved();
-    setPhase("done");
+    setActionError(false);
+    try {
+      await finishSession(sessionId, exertion, collectLogs());
+      clearSaved();
+      setPhase("done");
+    } catch {
+      // Eingaben bleiben erhalten (localStorage) — nur Fehler zeigen
+      setActionError(true);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function doCancel() {
-    if (sessionId) await cancelSession(sessionId);
+    try {
+      if (sessionId) await cancelSession(sessionId);
+    } catch {
+      // Session ggf. fremd oder offline — lokalen Stand trotzdem verwerfen,
+      // sonst hängt der Abbrechen-Dialog dauerhaft fest.
+    }
     clearSaved();
     router.replace(`/t/${shareToken}`);
   }
@@ -304,6 +364,12 @@ export default function SessionFlowClient({
             value={motivation}
             onChange={setMotivation}
           />
+          {actionError && (
+            <p className="text-center text-sm text-danger">
+              Das hat nicht geklappt — bitte Verbindung prüfen und nochmal
+              versuchen.
+            </p>
+          )}
           <button
             className="btn-primary w-full py-3.5 text-base"
             onClick={beginWorkout}
@@ -350,6 +416,12 @@ export default function SessionFlowClient({
             value={exertion}
             onChange={setExertion}
           />
+          {actionError && (
+            <p className="text-center text-sm text-danger">
+              Speichern fehlgeschlagen — deine Eingaben sind gesichert, bitte
+              nochmal versuchen.
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               className="btn-ghost flex-1"

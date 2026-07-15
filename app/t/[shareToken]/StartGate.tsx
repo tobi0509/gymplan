@@ -23,12 +23,20 @@ export default function StartGate({
       const raw = localStorage.getItem(`gymplan.session.${planId}`);
       if (raw) {
         const s = JSON.parse(raw);
-        setHasSaved(Boolean(s?.sessionId) && s?.phase !== "done");
+        setHasSaved(
+          Boolean(s?.sessionId) &&
+            s?.phase !== "done" &&
+            // Zwischenstand eines anderen Accounts (geteiltes Gerät) oder
+            // älter als 24h wird beim Öffnen ohnehin verworfen — dann auch
+            // kein "fortsetzen" anbieten.
+            (s?.clientName == null || s.clientName === clientName) &&
+            (s?.savedAt == null || Date.now() - s.savedAt <= 24 * 60 * 60 * 1000),
+        );
       }
     } catch {
       /* ignore */
     }
-  }, [planId]);
+  }, [planId, clientName]);
 
   return (
     <div className="card space-y-3">

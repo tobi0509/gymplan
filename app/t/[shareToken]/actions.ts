@@ -111,10 +111,33 @@ export async function finishSession(
   exertion: number,
   logs: SetLogInput[],
 ) {
-  await requireOwnSession(sessionId);
+  const { session } = await requireOwnSession(sessionId);
+
+  // Nur Sätze zu Übungen des Session-Plans akzeptieren
+  const planExercises = await prisma.planExercise.findMany({
+    where: { planId: session.planId },
+    select: { id: true },
+  });
+  const allowed = new Set(planExercises.map((p) => p.id));
   const valid = logs.filter(
-    (l) => l.weight != null || l.reps != null || l.durationMin != null,
+    (l) =>
+      allowed.has(l.planExerciseId) &&
+      (l.weight != null || l.reps != null || l.durationMin != null),
   );
+
+  // Statuswechsel als bedingtes Update: schließen zwei Tabs dieselbe Session
+  // ab, schreibt nur der erste die Sätze — sonst stünde jeder Satz doppelt
+  // im Verlauf.
+  const won = await prisma.workoutSession.updateMany({
+    where: { id: sessionId, status: SESSION_STATUS.IN_PROGRESS },
+    data: {
+      exertion,
+      status: SESSION_STATUS.COMPLETED,
+      finishedAt: new Date(),
+    },
+  });
+  if (won.count === 0) return { ok: true };
+
   if (valid.length) {
     await prisma.setLog.createMany({
       data: valid.map((l) => ({
@@ -131,21 +154,15 @@ export async function finishSession(
       })),
     });
   }
-  await prisma.workoutSession.update({
-    where: { id: sessionId },
-    data: {
-      exertion,
-      status: SESSION_STATUS.COMPLETED,
-      finishedAt: new Date(),
-    },
-  });
   return { ok: true };
 }
 
 export async function cancelSession(sessionId: string) {
   await requireOwnSession(sessionId);
-  await prisma.workoutSession.update({
-    where: { id: sessionId },
+  // Nur laufende Sessions abbrechen — ein alter Tab darf eine bereits
+  // abgeschlossene Session nicht nachträglich auf CANCELLED kippen.
+  await prisma.workoutSession.updateMany({
+    where: { id: sessionId, status: SESSION_STATUS.IN_PROGRESS },
     data: { status: SESSION_STATUS.CANCELLED, finishedAt: new Date() },
   });
   return { ok: true };
