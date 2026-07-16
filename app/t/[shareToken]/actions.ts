@@ -103,7 +103,6 @@ export type SetLogInput = {
   weight: number | null;
   reps: number | null;
   durationMin: number | null;
-  intensity: number | null;
 };
 
 export async function finishSession(
@@ -147,10 +146,6 @@ export async function finishSession(
         weight: l.weight,
         reps: l.reps,
         durationMin: l.durationMin,
-        intensity:
-          l.intensity != null
-            ? Math.min(5, Math.max(1, Math.round(l.intensity)))
-            : null,
       })),
     });
   }
@@ -184,7 +179,6 @@ export type HistorySession = {
       weight: number | null;
       reps: number | null;
       durationMin: number | null;
-      intensity: number | null;
     }[];
   }[];
 };
@@ -236,7 +230,6 @@ export async function getHistory(shareToken: string): Promise<{
           weight: number | null;
           reps: number | null;
           durationMin: number | null;
-          intensity: number | null;
         }[];
       }
     >();
@@ -256,7 +249,6 @@ export async function getHistory(shareToken: string): Promise<{
         weight: log.weight,
         reps: log.reps,
         durationMin: log.durationMin,
-        intensity: log.intensity,
       });
       if (log.weight != null && log.reps != null) {
         totalVolume += log.weight * log.reps;

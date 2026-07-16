@@ -143,7 +143,7 @@ export default function HistoryClient({
                           className="rounded-md bg-surface px-2 py-0.5 text-xs tabular-nums text-muted"
                         >
                           {st.durationMin != null
-                            ? `${st.durationMin} min · Int. ${st.intensity ?? "–"}`
+                            ? `${st.durationMin} min`
                             : `${st.weight ?? "–"}kg × ${st.reps ?? "–"}`}
                         </span>
                       ))}

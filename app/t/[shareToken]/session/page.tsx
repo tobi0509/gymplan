@@ -46,7 +46,6 @@ export default async function SessionPage({
         weight: number | null;
         reps: number | null;
         durationMin: number | null;
-        intensity: number | null;
       }
     >
   > = {};
@@ -55,7 +54,6 @@ export default async function SessionPage({
       weight: log.weight,
       reps: log.reps,
       durationMin: log.durationMin,
-      intensity: log.intensity,
     };
   }
 

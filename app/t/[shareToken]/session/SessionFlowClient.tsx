@@ -25,15 +25,22 @@ type LastLog = {
   weight: number | null;
   reps: number | null;
   durationMin: number | null;
-  intensity: number | null;
 };
 type Phase = "motivation" | "workout" | "exertion" | "done";
 type LogVal = {
   weight: string;
   reps: string;
   durationMin: string;
-  intensity: string;
   done?: boolean;
+};
+
+// Laufender Cardio-Countdown (max. einer gleichzeitig). endsAt-basiert statt
+// Sekunden-Dekrement — übersteht Tab-Throttling und Reloads.
+type CardioTimer = {
+  peId: string;
+  setNo: number;
+  endsAt: number; // Epoch-ms
+  totalSec: number;
 };
 
 // Zwischenstand pro Plan sichern, damit ein Reload/Tab-Wechsel nichts verliert.
@@ -53,6 +60,7 @@ type SavedState = {
   exertion: number;
   clientName?: string; // Gerät kann geteilt sein — Stand gehört zu einem Account
   savedAt?: number;
+  timer?: CardioTimer;
 };
 
 export default function SessionFlowClient({
@@ -84,6 +92,8 @@ export default function SessionFlowClient({
   // GainsFire-Popup beim Abschluss-Rating
   const [funny, setFunny] = useState<{ text: string; weight: number } | null>(null);
   const [funnyOpen, setFunnyOpen] = useState(false);
+  const [timer, setTimer] = useState<CardioTimer | null>(null);
+  const [timerNow, setTimerNow] = useState(0); // ticked jede Sekunde, treibt die Restzeit-Anzeige
 
   // logs[planExerciseId][setNumber] = { weight, reps, done }
   // Vorbelegung: Werte vom letzten Training, sonst Plan-Zielwerte.
@@ -104,7 +114,6 @@ export default function SessionFlowClient({
                   : ex.targetReps != null
                     ? String(ex.targetReps)
                     : "",
-              intensity: last?.intensity != null ? String(last.intensity) : "",
             }
           : {
               weight:
@@ -120,7 +129,6 @@ export default function SessionFlowClient({
                     ? String(ex.targetReps)
                     : "",
               durationMin: "",
-              intensity: "",
             };
       }
     }
@@ -163,8 +171,22 @@ export default function SessionFlowClient({
           weight: v.weight ?? "",
           reps: v.reps ?? "",
           durationMin: v.durationMin ?? "",
-          intensity: v.intensity ?? "",
           done: v.done,
+        };
+      }
+    }
+    // Lief beim Reload ein Cardio-Timer? Nur übernehmen, wenn die Zeit noch
+    // nicht abgelaufen ist — sonst gilt der Satz als (mit Ziel-Minuten)
+    // abgeschlossen, statt einen Timer bei 0:00 hängen zu lassen.
+    if (s.timer && s.timer.endsAt > Date.now()) {
+      setTimer(s.timer);
+    } else if (s.timer) {
+      const perSet = merged[s.timer.peId];
+      if (perSet?.[s.timer.setNo]) {
+        perSet[s.timer.setNo] = {
+          ...perSet[s.timer.setNo],
+          durationMin: String(Math.round(s.timer.totalSec / 60)),
+          done: true,
         };
       }
     }
@@ -190,13 +212,14 @@ export default function SessionFlowClient({
       exertion,
       clientName,
       savedAt: Date.now(),
+      timer: timer ?? undefined,
     };
     try {
       localStorage.setItem(saveKey(planId), JSON.stringify(state));
     } catch {
       /* Speicher voll o.ä. – Recovery ist optional */
     }
-  }, [sessionId, phase, exIdx, logs, motivation, exertion, planId, clientName]);
+  }, [sessionId, phase, exIdx, logs, motivation, exertion, planId, clientName, timer]);
 
   function clearSaved() {
     try {
@@ -251,7 +274,7 @@ export default function SessionFlowClient({
   function setLog(
     peId: string,
     setNo: number,
-    field: "weight" | "reps" | "durationMin" | "intensity",
+    field: "weight" | "reps" | "durationMin",
     value: string,
   ) {
     setLogs((prev) => ({
@@ -268,6 +291,61 @@ export default function SessionFlowClient({
         [setNo]: { ...prev[peId][setNo], done: !prev[peId][setNo].done },
       },
     }));
+  }
+
+  // Cardio-Countdown: läuft die Zeit ab, wird der geplante Minutenwert
+  // gespeichert und der Satz automatisch abgehakt. endsAt-basiert (nicht
+  // dekrementiert) — bleibt auch bei gedrosselten Hintergrund-Tabs korrekt.
+  useEffect(() => {
+    if (!timer) return;
+    const id = setInterval(() => setTimerNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [timer]);
+
+  useEffect(() => {
+    if (!timer) return;
+    if (Date.now() < timer.endsAt) return;
+    const plannedMin = Math.round(timer.totalSec / 60);
+    setLogs((prev) => ({
+      ...prev,
+      [timer.peId]: {
+        ...prev[timer.peId],
+        [timer.setNo]: {
+          ...prev[timer.peId][timer.setNo],
+          durationMin: String(plannedMin),
+          done: true,
+        },
+      },
+    }));
+    notifyDone();
+    setTimer(null);
+    // timerNow treibt den Ablauf-Check jede Sekunde erneut an
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timer, timerNow]);
+
+  function startCardioTimer(peId: string, setNo: number, minutes: number) {
+    if (minutes <= 0) return;
+    setTimer({ peId, setNo, endsAt: Date.now() + minutes * 60000, totalSec: minutes * 60 });
+  }
+
+  // Vorzeitiges Beenden: tatsächlich absolvierte Minuten speichern
+  // (aufgerundet, mindestens 1), Satz abhaken.
+  function stopCardioTimer() {
+    if (!timer) return;
+    const elapsedSec = timer.totalSec - Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000));
+    const elapsedMin = Math.max(1, Math.ceil(elapsedSec / 60));
+    setLogs((prev) => ({
+      ...prev,
+      [timer.peId]: {
+        ...prev[timer.peId],
+        [timer.setNo]: {
+          ...prev[timer.peId][timer.setNo],
+          durationMin: String(elapsedMin),
+          done: true,
+        },
+      },
+    }));
+    setTimer(null);
   }
 
   // Gesamtgewicht (Σ Gewicht × Wdh., beide gesetzt – wie totalVolume im Verlauf)
@@ -311,7 +389,6 @@ export default function SessionFlowClient({
                 weight: null,
                 reps: null,
                 durationMin: v.durationMin === "" ? null : Number(v.durationMin),
-                intensity: v.intensity === "" ? null : Number(v.intensity),
               }
             : {
                 planExerciseId: ex.planExerciseId,
@@ -319,7 +396,6 @@ export default function SessionFlowClient({
                 weight: v.weight === "" ? null : Number(v.weight),
                 reps: v.reps === "" ? null : Number(v.reps),
                 durationMin: null,
-                intensity: null,
               },
         );
       }
@@ -474,7 +550,7 @@ export default function SessionFlowClient({
   const isLast = exIdx === exercises.length - 1;
 
   // "Letztes Mal"-Zusammenfassung für die aktuelle Übung,
-  // z.B. "50×10 · 50×8" bzw. bei Cardio "20 min · Int. 4"
+  // z.B. "50×10 · 50×8" bzw. bei Cardio "20 min"
   const lastForEx = lastLogs[ex.planExerciseId];
   const lastSummary = lastForEx
     ? Object.keys(lastForEx)
@@ -482,13 +558,24 @@ export default function SessionFlowClient({
         .sort((a, b) => a - b)
         .map((s) => {
           const l = lastForEx[s];
-          if (l.durationMin != null) {
-            return `${l.durationMin} min · Int. ${l.intensity ?? "–"}`;
-          }
+          if (l.durationMin != null) return `${l.durationMin} min`;
           return `${l.weight ?? "–"}×${l.reps ?? "–"}`;
         })
         .join(" · ")
     : null;
+
+  // Laufender Cardio-Timer: Restzeit + Fortschritt fürs Rendering ableiten
+  const timerRemainingSec = timer
+    ? Math.max(0, Math.round((timer.endsAt - Date.now()) / 1000))
+    : 0;
+  const timerMM = String(Math.floor(timerRemainingSec / 60)).padStart(1, "0");
+  const timerSS = String(timerRemainingSec % 60).padStart(2, "0");
+  const timerPct = timer
+    ? Math.max(
+        0,
+        Math.min(100, ((timer.totalSec - timerRemainingSec) / timer.totalSec) * 100),
+      )
+    : 0;
 
   // Fortschritt = abgehakte Sätze über alle Übungen
   const totalSets = exercises.reduce((sum, e) => sum + e.sets, 0);
@@ -549,11 +636,13 @@ export default function SessionFlowClient({
           >
             <span>Satz</span>
             <span>{ex.isCardio ? "Minuten" : "Gewicht (kg)"}</span>
-            <span>{ex.isCardio ? "Intensität" : "Wdh."}</span>
+            <span>{ex.isCardio ? "" : "Wdh."}</span>
             <span className="text-center">✓</span>
           </div>
           {Array.from({ length: ex.sets }, (_, i) => i + 1).map((s) => {
             const v = logs[ex.planExerciseId][s];
+            const isRunningHere =
+              ex.isCardio && timer?.peId === ex.planExerciseId && timer?.setNo === s;
             return (
               <div
                 key={s}
@@ -573,42 +662,58 @@ export default function SessionFlowClient({
                   {s}
                 </span>
                 {ex.isCardio ? (
-                  <>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={1}
-                      className="input"
-                      value={v.durationMin}
-                      onChange={(e) =>
-                        setLog(ex.planExerciseId, s, "durationMin", e.target.value)
-                      }
-                    />
-                    <div className="flex gap-1">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <button
-                          key={n}
-                          type="button"
-                          aria-label={`Intensität ${n}`}
-                          onClick={() =>
-                            setLog(
-                              ex.planExerciseId,
-                              s,
-                              "intensity",
-                              v.intensity === String(n) ? "" : String(n),
-                            )
-                          }
-                          className={`grid h-10 w-8 place-items-center rounded-lg border text-sm font-semibold transition-colors ${
-                            v.intensity === String(n)
-                              ? "border-accent bg-accent text-black"
-                              : "border-border bg-surface-2 text-muted hover:text-foreground"
-                          }`}
-                        >
-                          {n}
-                        </button>
-                      ))}
+                  isRunningHere ? (
+                    <div className="col-span-3 flex items-center gap-3 rounded-xl border border-accent/40 bg-accent-soft px-3 py-2">
+                      <div className="flex-1">
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-xs text-muted">Läuft…</span>
+                          <span className="text-xl font-black tabular-nums text-accent">
+                            {timerMM}:{timerSS}
+                          </span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-surface-2">
+                          <div
+                            className="h-full rounded-full bg-accent transition-all"
+                            style={{ width: `${timerPct}%` }}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-ghost shrink-0 px-3 py-2 text-sm"
+                        onClick={stopCardioTimer}
+                      >
+                        Beenden
+                      </button>
                     </div>
-                  </>
+                  ) : (
+                    <>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        className="input"
+                        value={v.durationMin}
+                        onChange={(e) =>
+                          setLog(ex.planExerciseId, s, "durationMin", e.target.value)
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="btn-primary px-4 py-2 text-sm"
+                        disabled={
+                          timer != null ||
+                          v.durationMin === "" ||
+                          Number(v.durationMin) <= 0
+                        }
+                        onClick={() =>
+                          startCardioTimer(ex.planExerciseId, s, Number(v.durationMin))
+                        }
+                      >
+                        ▶ Start
+                      </button>
+                    </>
+                  )
                 ) : (
                   <>
                     <input
@@ -632,18 +737,20 @@ export default function SessionFlowClient({
                     />
                   </>
                 )}
-                <button
-                  type="button"
-                  aria-label={`Satz ${s} ${v.done ? "wieder öffnen" : "abhaken"}`}
-                  onClick={() => toggleDone(ex.planExerciseId, s)}
-                  className={`grid h-10 w-10 place-items-center rounded-xl border text-lg transition-colors ${
-                    v.done
-                      ? "border-accent bg-accent text-black"
-                      : "border-border bg-surface-2 text-muted hover:text-foreground"
-                  }`}
-                >
-                  ✓
-                </button>
+                {!isRunningHere && (
+                  <button
+                    type="button"
+                    aria-label={`Satz ${s} ${v.done ? "wieder öffnen" : "abhaken"}`}
+                    onClick={() => toggleDone(ex.planExerciseId, s)}
+                    className={`grid h-10 w-10 place-items-center rounded-xl border text-lg transition-colors ${
+                      v.done
+                        ? "border-accent bg-accent text-black"
+                        : "border-border bg-surface-2 text-muted hover:text-foreground"
+                    }`}
+                  >
+                    ✓
+                  </button>
+                )}
               </div>
             );
           })}
