@@ -388,7 +388,7 @@ export default function SessionFlowClient({
       <FlowShell title={planName} subtitle="Fast geschafft">
         {/* GainsFire-Popup: Gesamtgewicht + Spruch */}
         {funnyOpen && funny && (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 pb-safe backdrop-blur-sm">
             <div className="card w-full max-w-sm space-y-4 text-center animate-pop-in">
               <div className="text-4xl">🔥</div>
               <div>
@@ -650,23 +650,26 @@ export default function SessionFlowClient({
         </div>
 
         <RestTimer />
+      </div>
 
-        {/* Navigation */}
-        <div className="flex gap-2 pt-1">
+      {/* Navigation — klebt am unteren Rand, mit Daumen immer erreichbar.
+          sticky statt fixed: fixed springt unter iOS mit offener Tastatur mit. */}
+      <div className="sticky bottom-0 z-10 -mx-4 mt-3 border-t bg-base/90 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur">
+        <div className="flex gap-2">
           <button
-            className="btn-ghost flex-1"
+            className="btn-ghost flex-1 py-3"
             onClick={() => setExIdx((i) => Math.max(0, i - 1))}
             disabled={exIdx === 0}
           >
             ← Zurück
           </button>
           {isLast ? (
-            <button className="btn-primary flex-1" onClick={goToExertion}>
+            <button className="btn-primary flex-1 py-3" onClick={goToExertion}>
               Training abschließen
             </button>
           ) : (
             <button
-              className="btn-primary flex-1"
+              className="btn-primary flex-1 py-3"
               onClick={() => setExIdx((i) => Math.min(exercises.length - 1, i + 1))}
             >
               Nächste Übung →
@@ -677,7 +680,7 @@ export default function SessionFlowClient({
 
       {/* Abbrechen-Bestätigung */}
       {confirmCancel && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 pb-safe backdrop-blur-sm">
           <div className="card w-full max-w-sm space-y-4 text-center">
             <h3 className="text-lg font-semibold">Training wirklich abbrechen?</h3>
             <p className="text-sm text-muted">
@@ -716,7 +719,7 @@ function FlowShell({
   progress?: number;
 }) {
   return (
-    <main className="mx-auto max-w-md px-4 py-6">
+    <main className="mx-auto max-w-md px-4 pb-6 pt-[calc(1.5rem+env(safe-area-inset-top))]">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <div className="text-xs uppercase tracking-widest text-muted">{title}</div>

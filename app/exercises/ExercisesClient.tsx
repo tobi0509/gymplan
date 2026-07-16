@@ -293,7 +293,7 @@ function Editor({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 pb-safe backdrop-blur-sm"
       onClick={onCancel}
     >
       <div

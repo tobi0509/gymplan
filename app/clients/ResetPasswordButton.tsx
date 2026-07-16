@@ -27,7 +27,7 @@ export default function ResetPasswordButton({
         {busy ? "…" : "Neues Passwort"}
       </button>
       {creds && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 pb-safe backdrop-blur-sm">
           <div className="card w-full max-w-sm">
             <CredentialsBox
               creds={creds}

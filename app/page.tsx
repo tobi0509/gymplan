@@ -25,9 +25,9 @@ export default async function DashboardPage() {
   return (
     <>
       <TrainerNav />
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 pt-6 pb-tabbar md:py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Deine Trainingspläne</h1>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Deine Trainingspläne</h1>
           <p className="mt-1 text-muted">
             Erstelle einen Wochenplan, sieh die Muskel-Abdeckung live und teile ihn
             per Link. {exerciseCount} Übungen in der Datenbank.

@@ -20,7 +20,7 @@ export async function saveTrainingPreference(formData: FormData) {
         .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6),
     ),
   ).sort((a, b) => a - b);
-  if (weekdays.length === 0) redirect("/me?err=days");
+  if (weekdays.length === 0) redirect("/profile?err=days");
 
   const frequency = Math.min(
     7,
@@ -38,6 +38,7 @@ export async function saveTrainingPreference(formData: FormData) {
   });
 
   revalidatePath("/me");
+  revalidatePath("/profile");
   revalidatePath("/clients");
-  redirect("/me");
+  redirect("/profile");
 }

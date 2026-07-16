@@ -20,9 +20,9 @@ export default async function ExercisesPage() {
   return (
     <>
       <TrainerNav />
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 pt-6 pb-tabbar md:py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold tracking-tight">Übungsdatenbank</h1>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Übungsdatenbank</h1>
           <p className="mt-1 text-muted">
             Jede Übung trägt die trainierten Muskeln in Prozent. Diese Werte
             steuern die Muskel-Abdeckung im Plan.

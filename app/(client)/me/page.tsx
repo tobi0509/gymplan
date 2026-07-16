@@ -2,17 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAccount, ROLE } from "@/lib/auth";
-import { logout } from "@/app/login/actions";
 import {
   startOfWeek,
   localDateKey,
   addDays,
   parseWeekdays,
+  WEEKDAY_LABELS,
 } from "@/lib/schedule";
 import { getEffectiveWeek } from "@/lib/week";
 import WeekStrip, { type StripDay } from "./WeekStrip";
-import PreferenceCard from "./PreferenceCard";
-import ChangePasswordForm from "@/components/ChangePasswordForm";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +24,9 @@ function dayLabel(key: Date, opts?: Intl.DateTimeFormatOptions) {
   });
 }
 
-export default async function MePage({
-  searchParams,
-}: {
-  searchParams: { err?: string };
-}) {
+// "Heute"-Tab: Trainingswoche + Pläne. Rhythmus/Passwort/Abmelden liegen im
+// Profil-Tab, die Statistik im Fortschritt-Tab.
+export default async function MePage() {
   const account = await requireAccount();
   if (account.role === ROLE.TRAINER) redirect("/");
 
@@ -93,12 +89,6 @@ export default async function MePage({
     };
   });
 
-  const sessions = await prisma.workoutSession.findMany({
-    where: { clientName: account.displayName, status: "COMPLETED" },
-    orderBy: { startedAt: "desc" },
-    take: 5,
-    include: { plan: { select: { name: true, shareToken: true } } },
-  });
   const totalSessions = await prisma.workoutSession.count({
     where: { clientName: account.displayName, status: "COMPLETED" },
   });
@@ -107,24 +97,15 @@ export default async function MePage({
   const waitingForTrainer = preference != null && week.source === "NONE";
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <div className="text-xs uppercase tracking-widest text-muted">
-            GymPlan
-          </div>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">
-            Hi, {account.displayName}!
-          </h1>
-          <p className="text-muted">
-            {totalSessions} abgeschlossene Trainings
-          </p>
+    <main className="mx-auto max-w-2xl px-4 py-6 md:py-8">
+      <div className="mb-6">
+        <div className="text-xs uppercase tracking-widest text-muted">
+          GymPlan
         </div>
-        <form action={logout}>
-          <button className="btn-ghost" type="submit">
-            Abmelden
-          </button>
-        </form>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">
+          Hi, {account.displayName}!
+        </h1>
+        <p className="text-muted">{totalSessions} abgeschlossene Trainings</p>
       </div>
 
       {/* Trainingswoche (sobald der Trainer zugeteilt hat) */}
@@ -157,19 +138,30 @@ export default async function MePage({
           </div>
           <p className="mt-1 text-sm text-muted">
             Sobald es fertig ist, siehst du hier deine Trainingswoche.
+            {weekdays.length > 0 && (
+              <>
+                {" "}
+                Deine Zeiten:{" "}
+                {weekdays.map((d) => WEEKDAY_LABELS[d]).join(", ")}.
+              </>
+            )}
           </p>
         </section>
       )}
 
-      {/* Trainingsrhythmus: ohne Präferenz prominent, sonst eingeklappt */}
-      <div className="mb-6">
-        <PreferenceCard
-          initialWeekdays={weekdays}
-          initialFrequency={preference?.frequency ?? null}
-          collapsed={preference != null && searchParams.err !== "days"}
-          error={searchParams.err}
-        />
-      </div>
+      {/* Onboarding: noch kein Trainingsrhythmus hinterlegt */}
+      {preference == null && (
+        <section className="card mb-6 border-accent/40">
+          <div className="text-lg font-semibold">Willkommen! 👋</div>
+          <p className="mt-1 text-sm text-muted">
+            Lege zuerst deinen Trainingsrhythmus fest — dein Trainer stellt dir
+            daraus dein Wochenprogramm zusammen.
+          </p>
+          <Link href="/profile" className="btn-primary mt-3 w-full">
+            Trainingsrhythmus festlegen
+          </Link>
+        </section>
+      )}
 
       {/* Einzeln zugewiesene Pläne */}
       {plans.length > 0 && (
@@ -195,41 +187,6 @@ export default async function MePage({
           ))}
         </section>
       )}
-
-      {sessions.length > 0 && (
-        <section className="mb-6 space-y-3">
-          <h2 className="text-lg font-semibold">Letzte Trainings</h2>
-          {sessions.map((s) => (
-            <Link
-              key={s.id}
-              href={`/t/${s.plan.shareToken}/history`}
-              className="card flex items-center justify-between hover:border-accent/40"
-            >
-              <div>
-                <div className="text-sm font-medium">{s.plan.name}</div>
-                <div className="text-xs text-muted">
-                  {s.startedAt.toLocaleDateString("de-DE", {
-                    weekday: "short",
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                  })}
-                </div>
-              </div>
-              <div className="flex gap-1.5 text-xs">
-                {s.motivation != null && (
-                  <span className="chip">Motivation {s.motivation}</span>
-                )}
-                {s.exertion != null && (
-                  <span className="chip">Anstrengung {s.exertion}</span>
-                )}
-              </div>
-            </Link>
-          ))}
-        </section>
-      )}
-
-      <ChangePasswordForm />
     </main>
   );
 }

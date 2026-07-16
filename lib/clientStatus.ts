@@ -52,6 +52,7 @@ export type ClientSessionPoint = {
   id: string;
   date: string; // ISO
   planName: string;
+  shareToken: string; // für Links auf /t/<token>/history
   motivation: number | null;
   exertion: number | null;
   totalVolume: number;
@@ -80,7 +81,7 @@ export async function getClientTrainingStats(clientName: string): Promise<Client
     where: { clientName, status: "COMPLETED" },
     orderBy: { startedAt: "asc" },
     include: {
-      plan: { select: { name: true } },
+      plan: { select: { name: true, shareToken: true } },
       setLogs: { select: { weight: true, reps: true } },
     },
   });
@@ -93,6 +94,7 @@ export async function getClientTrainingStats(clientName: string): Promise<Client
       id: s.id,
       date: s.startedAt.toISOString(),
       planName: s.plan.name,
+      shareToken: s.plan.shareToken,
       motivation: s.motivation,
       exertion: s.exertion,
       totalVolume: Math.round(totalVolume),

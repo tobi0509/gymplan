@@ -25,12 +25,31 @@ body {
   min-height: 100%;
 }
 
+/* App-Feeling am Handy: kein Browser-Tap-Blitz, keine iOS-Textskalierung */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   color: var(--foreground);
   background:
     radial-gradient(1200px 700px at 50% -10%, rgba(0, 230, 168, 0.06), transparent 60%),
     var(--base);
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none; /* kein Gummiband/Pull-to-Refresh */
+}
+
+/* Bedienelemente verhalten sich wie App-UI: nicht markierbar, kein
+   Doppeltipp-Zoom. Inhalts-Text bleibt selektierbar. */
+button,
+a,
+label,
+summary {
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 
 @layer components {
@@ -53,7 +72,8 @@ body {
     @apply btn border border-transparent bg-[color:var(--danger)] text-black hover:brightness-110;
   }
   .input {
-    @apply w-full rounded-xl border bg-surface-2 px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted focus:border-accent;
+    /* 16px auf Mobile — verhindert den automatischen iOS-Zoom beim Fokus */
+    @apply w-full rounded-xl border bg-surface-2 px-3 py-2.5 text-base text-foreground outline-none placeholder:text-muted focus:border-accent md:text-sm;
   }
   .label {
     @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted;
@@ -63,6 +83,20 @@ body {
   }
   .pill-active {
     @apply border-accent bg-[color:var(--accent-soft)] text-accent;
+  }
+}
+
+@layer utilities {
+  /* Safe-Area (Notch/Home-Indicator) — braucht viewport-fit=cover */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Freiraum unter dem Seiteninhalt, damit die fixe Tab-Bar nichts verdeckt */
+  .pb-tabbar {
+    padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
   }
 }
 

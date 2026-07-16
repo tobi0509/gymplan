@@ -78,7 +78,7 @@ export default async function ProgramDetailPage({
   return (
     <>
       <TrainerNav />
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="mx-auto max-w-3xl px-4 pt-6 pb-tabbar md:py-8">
         <div className="mb-6">
           <Link href="/programs" className="text-sm text-muted hover:text-foreground">
             ← Alle Programme

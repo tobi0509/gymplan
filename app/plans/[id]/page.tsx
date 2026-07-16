@@ -34,7 +34,7 @@ export default async function PlanPage({
   return (
     <>
       <TrainerNav />
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 pt-6 pb-tabbar md:py-8">
         <PlanBuilderClient
           plan={{ id: plan.id, name: plan.name, shareToken: plan.shareToken }}
           initialItems={plan.exercises.map((pe) => ({

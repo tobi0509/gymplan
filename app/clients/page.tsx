@@ -93,9 +93,9 @@ export default async function ClientsPage() {
   return (
     <>
       <TrainerNav />
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 pt-6 pb-tabbar md:py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Kunden</h1>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Kunden</h1>
           <p className="mt-1 text-muted">
             Lege Zugänge an, weise Pläne zu und verschicke die Zugangsdaten.
           </p>

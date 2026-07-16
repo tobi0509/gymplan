@@ -32,7 +32,7 @@ export default async function HistoryPage({
         >
           ← Zurück zum Plan
         </Link>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">
           {account.role === ROLE.TRAINER && clientName !== account.displayName
             ? `Verlauf von ${clientName}`
             : "Dein Verlauf"}

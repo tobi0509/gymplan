@@ -76,7 +76,7 @@ export default async function ClientPlanPage({
         <div className="text-xs uppercase tracking-widest text-muted">
           Trainingsplan von {plan.ownerName}
         </div>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">{plan.name}</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{plan.name}</h1>
       </div>
 
       <div className="card mb-4">
@@ -109,14 +109,14 @@ export default async function ClientPlanPage({
         📈 Verlauf & Fortschritt ansehen
       </Link>
 
-      <div className="mt-4 text-center">
-        <Link
-          href={account.role === ROLE.CLIENT ? "/me" : "/"}
-          className="text-sm text-muted hover:text-foreground"
-        >
-          ← Zur Übersicht
-        </Link>
-      </div>
+      {/* Kunden erreichen die Übersicht über die Tab-Bar */}
+      {account.role !== ROLE.CLIENT && (
+        <div className="mt-4 text-center">
+          <Link href="/" className="text-sm text-muted hover:text-foreground">
+            ← Zur Übersicht
+          </Link>
+        </div>
+      )}
     </main>
   );
 }

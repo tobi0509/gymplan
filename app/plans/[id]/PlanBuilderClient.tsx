@@ -123,7 +123,7 @@ export default function PlanBuilderClient({
           <Link href="/" className="text-sm text-muted hover:text-foreground">
             ← Alle Pläne
           </Link>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">{plan.name}</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{plan.name}</h1>
         </div>
         <div className="flex items-center gap-2">
           <button className="btn-ghost" onClick={copyLink}>

@@ -143,7 +143,7 @@ export default async function ClientWeekPage({
   return (
     <>
       <TrainerNav />
-      <main className="mx-auto max-w-4xl px-4 py-8">
+      <main className="mx-auto max-w-4xl px-4 pt-6 pb-tabbar md:py-8">
         <div className="mb-6">
           <Link href="/clients" className="text-sm text-muted hover:text-foreground">
             ← Kunden

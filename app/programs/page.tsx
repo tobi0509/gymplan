@@ -19,9 +19,9 @@ export default async function ProgramsPage() {
   return (
     <>
       <TrainerNav />
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 pt-6 pb-tabbar md:py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Programme</h1>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Programme</h1>
           <p className="mt-1 text-muted">
             Ein Programm bündelt mehrere Pläne zu einem Trainingszyklus (z.B.
             3er-Split: Tag 1 Push, Tag 2 Pull, Tag 3 Beine).
