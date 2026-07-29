@@ -105,6 +105,9 @@ export default async function ClientDetailPage({
           <Link href={`/clients/${client.id}/week`} className="btn-ghost">
             Wochenprogramm bearbeiten
           </Link>
+          <Link href={`/clients/${client.id}/history`} className="btn-ghost">
+            Trainingsverlauf
+          </Link>
           <form action={deleteClientAccount}>
             <input type="hidden" name="id" value={client.id} />
             <button className="btn-ghost text-danger" type="submit">

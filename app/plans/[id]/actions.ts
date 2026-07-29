@@ -101,6 +101,37 @@ export async function removePlanExercise(id: string) {
   return { ok: true };
 }
 
+export async function movePlanExercise(id: string, dir: "up" | "down") {
+  await requireTrainer();
+  const pe = await prisma.planExercise.findUnique({ where: { id } });
+  if (!pe) return { ok: false };
+  const neighbor = await prisma.planExercise.findFirst({
+    where: {
+      planId: pe.planId,
+      order: dir === "up" ? { lt: pe.order } : { gt: pe.order },
+    },
+    orderBy: { order: dir === "up" ? "desc" : "asc" },
+  });
+  if (!neighbor) return { ok: false };
+  await prisma.$transaction([
+    prisma.planExercise.update({ where: { id: pe.id }, data: { order: neighbor.order } }),
+    prisma.planExercise.update({ where: { id: neighbor.id }, data: { order: pe.order } }),
+  ]);
+  return { ok: true };
+}
+
+// Direktes Setzen der kompletten Reihenfolge (nach Drag-and-Drop), da Swaps
+// bei beliebigen Sprüngen (Position 5 -> 1) nicht praktikabel sind.
+export async function reorderPlanExercises(planId: string, orderedIds: string[]) {
+  await requireTrainer();
+  await prisma.$transaction(
+    orderedIds.map((id, i) =>
+      prisma.planExercise.update({ where: { id, planId }, data: { order: i } }),
+    ),
+  );
+  return { ok: true };
+}
+
 export async function renamePlan(id: string, name: string) {
   await requireTrainer();
   await prisma.plan.update({ where: { id }, data: { name: name.trim() || "Plan" } });

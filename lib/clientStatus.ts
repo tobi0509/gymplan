@@ -109,3 +109,139 @@ export async function getClientTrainingStats(clientName: string): Promise<Client
     sessions: points,
   };
 }
+
+export type ClientHistorySession = {
+  id: string;
+  date: string; // ISO
+  planName: string;
+  motivation: number | null;
+  exertion: number | null;
+  durationMin: number | null;
+  totalVolume: number;
+  totalSets: number;
+  exercises: {
+    name: string;
+    topWeight: number | null;
+    sets: { setNumber: number; weight: number | null; reps: number | null; durationMin: number | null }[];
+  }[];
+};
+
+// Plan-übergreifender Verlauf für die Trainer-Ansicht (im Gegensatz zu
+// getHistory in app/t/[shareToken]/actions.ts, das nur einen Plan zeigt).
+export async function getClientHistory(clientName: string): Promise<ClientHistorySession[]> {
+  const sessions = await prisma.workoutSession.findMany({
+    where: { clientName, status: "COMPLETED" },
+    orderBy: { startedAt: "asc" },
+    include: {
+      plan: { select: { name: true } },
+      setLogs: {
+        include: { planExercise: { include: { exercise: true } } },
+      },
+    },
+  });
+
+  return sessions.map((s) => {
+    const byExercise = new Map<
+      string,
+      {
+        name: string;
+        order: number;
+        sets: { setNumber: number; weight: number | null; reps: number | null; durationMin: number | null }[];
+      }
+    >();
+    let totalVolume = 0;
+    for (const log of s.setLogs) {
+      const ex = log.planExercise.exercise;
+      const key = log.planExerciseId;
+      if (!byExercise.has(key)) {
+        byExercise.set(key, { name: ex.name, order: log.planExercise.order, sets: [] });
+      }
+      byExercise.get(key)!.sets.push({
+        setNumber: log.setNumber,
+        weight: log.weight,
+        reps: log.reps,
+        durationMin: log.durationMin,
+      });
+      if (log.weight != null && log.reps != null) {
+        totalVolume += log.weight * log.reps;
+      }
+    }
+
+    const exercises = Array.from(byExercise.values())
+      .sort((a, b) => a.order - b.order)
+      .map((e) => ({
+        name: e.name,
+        topWeight: e.sets.reduce<number | null>(
+          (max, st) => (st.weight != null && (max == null || st.weight > max) ? st.weight : max),
+          null,
+        ),
+        sets: e.sets.sort((a, b) => a.setNumber - b.setNumber),
+      }));
+
+    const durationMin =
+      s.finishedAt != null
+        ? Math.max(0, Math.round((s.finishedAt.getTime() - s.startedAt.getTime()) / 60000))
+        : null;
+
+    return {
+      id: s.id,
+      date: s.startedAt.toISOString(),
+      planName: s.plan.name,
+      motivation: s.motivation,
+      exertion: s.exertion,
+      durationMin,
+      totalVolume: Math.round(totalVolume),
+      totalSets: s.setLogs.length,
+      exercises,
+    };
+  });
+}
+
+export type ExerciseOption = { exerciseId: string; name: string };
+
+// Übungen, die der Kunde je geloggt hat (über alle Pläne), für die
+// Fortschritts-Auswahl in der Trainer-Ansicht.
+export async function getExerciseOptions(clientName: string): Promise<ExerciseOption[]> {
+  const logs = await prisma.setLog.findMany({
+    where: { session: { clientName, status: "COMPLETED" } },
+    select: { planExercise: { select: { exerciseId: true, exercise: { select: { name: true } } } } },
+    distinct: ["planExerciseId"],
+  });
+  const byId = new Map<string, string>();
+  for (const l of logs) {
+    byId.set(l.planExercise.exerciseId, l.planExercise.exercise.name);
+  }
+  return Array.from(byId.entries())
+    .map(([exerciseId, name]) => ({ exerciseId, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, "de"));
+}
+
+export type ExerciseProgressPoint = { date: string; topWeight: number | null };
+
+// Top-Gewicht je Einheit für eine Übung, über alle Pläne des Kunden hinweg,
+// aufsteigend nach Datum (für LineChart).
+export async function getExerciseProgress(
+  clientName: string,
+  exerciseId: string,
+): Promise<ExerciseProgressPoint[]> {
+  const sessions = await prisma.workoutSession.findMany({
+    where: { clientName, status: "COMPLETED" },
+    orderBy: { startedAt: "asc" },
+    select: {
+      startedAt: true,
+      setLogs: {
+        where: { planExercise: { exerciseId } },
+        select: { weight: true },
+      },
+    },
+  });
+  return sessions
+    .filter((s) => s.setLogs.length > 0)
+    .map((s) => ({
+      date: s.startedAt.toISOString(),
+      topWeight: s.setLogs.reduce<number | null>(
+        (max, l) => (l.weight != null && (max == null || l.weight > max) ? l.weight : max),
+        null,
+      ),
+    }));
+}

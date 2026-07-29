@@ -2,6 +2,23 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import {
+  DndContext,
+  PointerSensor,
+  KeyboardSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import BodyMap, { toBodyData } from "@/components/BodyMap";
 import { computeCoverage, type PlanExerciseInput } from "@/lib/coverage";
 import { EQUIPMENT_LABEL, type Equipment } from "@/lib/constants";
@@ -9,6 +26,8 @@ import {
   addExerciseToPlan,
   updatePlanExercise,
   removePlanExercise,
+  movePlanExercise,
+  reorderPlanExercises,
   type PlanExerciseDTO,
 } from "./actions";
 
@@ -35,6 +54,10 @@ export default function PlanBuilderClient({
   const [picker, setPicker] = useState(false);
   const [copied, setCopied] = useState(false);
   const [, start] = useTransition();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const coverage = useMemo(() => {
     const input: PlanExerciseInput[] = items.map((it) => ({
@@ -100,6 +123,35 @@ export default function PlanBuilderClient({
     });
   }
 
+  function move(id: string, dir: "up" | "down") {
+    setItems((prev) => {
+      const idx = prev.findIndex((it) => it.id === id);
+      const swapWith = dir === "up" ? idx - 1 : idx + 1;
+      if (idx === -1 || swapWith < 0 || swapWith >= prev.length) return prev;
+      const next = prev.slice();
+      [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
+      return next;
+    });
+    start(async () => {
+      await movePlanExercise(id, dir);
+    });
+  }
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    setItems((prev) => {
+      const oldIndex = prev.findIndex((it) => it.id === active.id);
+      const newIndex = prev.findIndex((it) => it.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+      const next = arrayMove(prev, oldIndex, newIndex);
+      start(async () => {
+        await reorderPlanExercises(plan.id, next.map((it) => it.id));
+      });
+      return next;
+    });
+  }
+
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(shareUrl);
@@ -144,70 +196,32 @@ export default function PlanBuilderClient({
             </div>
           )}
 
-          {items.map((it, idx) => (
-            <div key={it.id} className="card">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="grid h-6 w-6 place-items-center rounded-lg bg-surface-2 text-xs text-muted">
-                      {idx + 1}
-                    </span>
-                    <span className="font-semibold">{it.name}</span>
-                  </div>
-                  <div className="mt-0.5 pl-8 text-xs text-muted">
-                    {EQUIPMENT_LABEL[it.equipment as Equipment] ?? it.equipment}
-                  </div>
-                </div>
-                <button
-                  className="btn-ghost px-2 py-1 text-danger"
-                  onClick={() => remove(it.id)}
-                >
-                  ✕
-                </button>
-              </div>
-
-              {(it.category ?? "").toLowerCase() === "cardio" ? (
-                <div className="mt-3 grid grid-cols-2 gap-3 pl-8">
-                  <NumberField
-                    label="Sätze"
-                    value={it.sets}
-                    min={1}
-                    onChange={(v) => patch(it.id, { sets: v === "" ? 0 : v })}
-                    onCommit={(v) => commitSets(it.id, v)}
-                  />
-                  <NumberField
-                    label="Ziel-Minuten"
-                    value={it.targetReps ?? ""}
-                    onChange={(v) => patch(it.id, { targetReps: v === "" ? null : v })}
-                    onCommit={(v) => commitReps(it.id, v)}
-                  />
-                </div>
-              ) : (
-                <div className="mt-3 grid grid-cols-3 gap-3 pl-8">
-                  <NumberField
-                    label="Sätze"
-                    value={it.sets}
-                    min={1}
-                    onChange={(v) => patch(it.id, { sets: v === "" ? 0 : v })}
-                    onCommit={(v) => commitSets(it.id, v)}
-                  />
-                  <NumberField
-                    label="Wdh."
-                    value={it.targetReps ?? ""}
-                    onChange={(v) => patch(it.id, { targetReps: v === "" ? null : v })}
-                    onCommit={(v) => commitReps(it.id, v)}
-                  />
-                  <NumberField
-                    label="Gewicht (kg)"
-                    value={it.targetWeight ?? ""}
-                    step={0.5}
-                    onChange={(v) => patch(it.id, { targetWeight: v === "" ? null : v })}
-                    onCommit={(v) => commitWeight(it.id, v)}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext
+              items={items.map((it) => it.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {items.map((it, idx) => (
+                <ExerciseCard
+                  key={it.id}
+                  item={it}
+                  index={idx}
+                  isFirst={idx === 0}
+                  isLast={idx === items.length - 1}
+                  onMove={move}
+                  onRemove={remove}
+                  onPatch={patch}
+                  onCommitSets={commitSets}
+                  onCommitReps={commitReps}
+                  onCommitWeight={commitWeight}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
 
           {/* Add exercise */}
           {picker ? (
@@ -257,6 +271,132 @@ export default function PlanBuilderClient({
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function ExerciseCard({
+  item,
+  index,
+  isFirst,
+  isLast,
+  onMove,
+  onRemove,
+  onPatch,
+  onCommitSets,
+  onCommitReps,
+  onCommitWeight,
+}: {
+  item: PlanExerciseDTO;
+  index: number;
+  isFirst: boolean;
+  isLast: boolean;
+  onMove: (id: string, dir: "up" | "down") => void;
+  onRemove: (id: string) => void;
+  onPatch: (id: string, fields: Partial<PlanExerciseDTO>) => void;
+  onCommitSets: (id: string, v: number | "") => void;
+  onCommitReps: (id: string, v: number | "") => void;
+  onCommitWeight: (id: string, v: number | "") => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: item.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.6 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="card">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-1">
+          <button
+            className="mt-0.5 grid h-6 w-6 shrink-0 cursor-grab place-items-center rounded-lg text-muted hover:bg-surface-2 active:cursor-grabbing"
+            aria-label="Ziehen zum Umsortieren"
+            {...attributes}
+            {...listeners}
+          >
+            ⠿
+          </button>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="grid h-6 w-6 place-items-center rounded-lg bg-surface-2 text-xs text-muted">
+                {index + 1}
+              </span>
+              <span className="font-semibold">{item.name}</span>
+            </div>
+            <div className="mt-0.5 pl-8 text-xs text-muted">
+              {EQUIPMENT_LABEL[item.equipment as Equipment] ?? item.equipment}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-0.5">
+          <button
+            className="btn-ghost px-2 py-1"
+            onClick={() => onMove(item.id, "up")}
+            disabled={isFirst}
+            aria-label={`${item.name} nach oben`}
+          >
+            ▲
+          </button>
+          <button
+            className="btn-ghost px-2 py-1"
+            onClick={() => onMove(item.id, "down")}
+            disabled={isLast}
+            aria-label={`${item.name} nach unten`}
+          >
+            ▼
+          </button>
+          <button
+            className="btn-ghost px-2 py-1 text-danger"
+            onClick={() => onRemove(item.id)}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {(item.category ?? "").toLowerCase() === "cardio" ? (
+        <div className="mt-3 grid grid-cols-2 gap-3 pl-8">
+          <NumberField
+            label="Sätze"
+            value={item.sets}
+            min={1}
+            onChange={(v) => onPatch(item.id, { sets: v === "" ? 0 : v })}
+            onCommit={(v) => onCommitSets(item.id, v)}
+          />
+          <NumberField
+            label="Ziel-Minuten"
+            value={item.targetReps ?? ""}
+            onChange={(v) => onPatch(item.id, { targetReps: v === "" ? null : v })}
+            onCommit={(v) => onCommitReps(item.id, v)}
+          />
+        </div>
+      ) : (
+        <div className="mt-3 grid grid-cols-3 gap-3 pl-8">
+          <NumberField
+            label="Sätze"
+            value={item.sets}
+            min={1}
+            onChange={(v) => onPatch(item.id, { sets: v === "" ? 0 : v })}
+            onCommit={(v) => onCommitSets(item.id, v)}
+          />
+          <NumberField
+            label="Wdh."
+            value={item.targetReps ?? ""}
+            onChange={(v) => onPatch(item.id, { targetReps: v === "" ? null : v })}
+            onCommit={(v) => onCommitReps(item.id, v)}
+          />
+          <NumberField
+            label="Gewicht (kg)"
+            value={item.targetWeight ?? ""}
+            step={0.5}
+            onChange={(v) => onPatch(item.id, { targetWeight: v === "" ? null : v })}
+            onCommit={(v) => onCommitWeight(item.id, v)}
+          />
+        </div>
+      )}
     </div>
   );
 }
