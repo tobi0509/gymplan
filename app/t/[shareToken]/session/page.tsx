@@ -27,8 +27,8 @@ export default async function SessionPage({
   // an exercises[0] scheitern (StartGate sperrt nur den Button, nicht die URL).
   if (plan.exercises.length === 0) redirect(`/t/${params.shareToken}`);
 
-  // Werte des letzten abgeschlossenen Trainings – zum Vorbelegen der Inputs
-  // und für den "Letztes Mal"-Hinweis.
+  // Werte des letzten abgeschlossenen Trainings – für den "Letztes Mal"-Hinweis
+  // und die Wdh.-Vorbelegung (Gewicht wird separat über maxWeights vorbelegt).
   const lastSession = await prisma.workoutSession.findFirst({
     where: {
       planId: plan.id,
@@ -57,6 +57,28 @@ export default async function SessionPage({
     };
   }
 
+  // Maximal je erreichtes Gewicht pro Übung, über ALLE Pläne dieses Kunden
+  // hinweg (nicht nur diesen Plan) – Vorgabegewicht soll auch bei einer
+  // schwächeren letzten Einheit das beste je geschaffte Gewicht zeigen.
+  const exerciseIds = Array.from(
+    new Set(plan.exercises.map((pe) => pe.exerciseId)),
+  );
+  const bestLogs = await prisma.setLog.findMany({
+    where: {
+      weight: { not: null },
+      planExercise: { exerciseId: { in: exerciseIds } },
+      session: { clientName: account.displayName, status: "COMPLETED" },
+    },
+    select: { weight: true, planExercise: { select: { exerciseId: true } } },
+  });
+  const maxWeights: Record<string, number> = {};
+  for (const log of bestLogs) {
+    const exerciseId = log.planExercise.exerciseId;
+    if (log.weight != null && (maxWeights[exerciseId] ?? -Infinity) < log.weight) {
+      maxWeights[exerciseId] = log.weight;
+    }
+  }
+
   return (
     <SessionFlowClient
       shareToken={params.shareToken}
@@ -65,6 +87,7 @@ export default async function SessionPage({
       clientName={account.displayName}
       exercises={plan.exercises.map((pe) => ({
         planExerciseId: pe.id,
+        exerciseId: pe.exerciseId,
         name: pe.exercise.name,
         imageUrl: pe.exercise.imageUrl,
         sets: pe.sets,
@@ -73,6 +96,7 @@ export default async function SessionPage({
         isCardio: (pe.exercise.category ?? "").toLowerCase() === "cardio",
       }))}
       lastLogs={lastLogs}
+      maxWeights={maxWeights}
     />
   );
 }

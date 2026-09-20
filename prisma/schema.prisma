@@ -163,6 +163,7 @@ model Plan {
   shareToken          String              @unique @default(cuid())
   assignedTo          Account?            @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
   assignedToId        String?
+  order               Int                 @default(0) // Position in der Trainings-Warteschlange des Kunden
   createdAt           DateTime            @default(now())
   exercises           PlanExercise[]
   sessions            WorkoutSession[]

@@ -4,7 +4,6 @@ import TabBar, { type TabItem } from "./TabBar";
 
 const TRAINER_TABS: TabItem[] = [
   { href: "/", label: "Pläne", icon: "dumbbell", activePrefixes: ["/plans"] },
-  { href: "/programs", label: "Programme", icon: "layers" },
   { href: "/exercises", label: "Übungen", icon: "list" },
   { href: "/clients", label: "Kunden", icon: "users" },
 ];

@@ -13,6 +13,7 @@ import {
 
 type Ex = {
   planExerciseId: string;
+  exerciseId: string;
   name: string;
   imageUrl: string | null;
   sets: number;
@@ -70,6 +71,7 @@ export default function SessionFlowClient({
   clientName,
   exercises,
   lastLogs,
+  maxWeights,
 }: {
   shareToken: string;
   planId: string;
@@ -77,6 +79,7 @@ export default function SessionFlowClient({
   clientName: string;
   exercises: Ex[];
   lastLogs: Record<string, Record<number, LastLog>>;
+  maxWeights: Record<string, number>;
 }) {
   const router = useRouter();
   const name = clientName;
@@ -96,11 +99,15 @@ export default function SessionFlowClient({
   const [timerNow, setTimerNow] = useState(0); // ticked jede Sekunde, treibt die Restzeit-Anzeige
 
   // logs[planExerciseId][setNumber] = { weight, reps, done }
-  // Vorbelegung: Werte vom letzten Training, sonst Plan-Zielwerte.
+  // Vorbelegung Gewicht: maximal je erreichtes Gewicht für diese Übung (über
+  // alle Pläne hinweg), sonst Plan-Zielgewicht — bewusst NICHT das letzte
+  // Training, sonst ginge eine schwächere letzte Einheit als Referenz verloren.
+  // Vorbelegung Wdh./Cardio-Minuten: weiterhin vom letzten Training.
   function defaultLogs(): Record<string, Record<number, LogVal>> {
     const init: Record<string, Record<number, LogVal>> = {};
     for (const ex of exercises) {
       init[ex.planExerciseId] = {};
+      const maxWeight = maxWeights[ex.exerciseId];
       for (let s = 1; s <= ex.sets; s++) {
         const last = lastLogs[ex.planExerciseId]?.[s];
         init[ex.planExerciseId][s] = ex.isCardio
@@ -117,8 +124,8 @@ export default function SessionFlowClient({
             }
           : {
               weight:
-                last?.weight != null
-                  ? String(last.weight)
+                maxWeight != null
+                  ? String(maxWeight)
                   : ex.targetWeight != null
                     ? String(ex.targetWeight)
                     : "",

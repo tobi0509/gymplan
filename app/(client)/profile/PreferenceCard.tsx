@@ -51,8 +51,8 @@ export default function PreferenceCard({
       <div>
         <h2 className="text-lg font-semibold">Dein Trainingsrhythmus</h2>
         <p className="text-sm text-muted">
-          An welchen Tagen hast du Zeit zu trainieren? Dein Trainer stellt dir
-          daraus dein Wochenprogramm zusammen.
+          An welchen Tagen hast du Zeit zu trainieren? Dein Trainer richtet
+          danach deine Trainings ein.
         </p>
       </div>
       <form action={saveTrainingPreference} className="space-y-4">

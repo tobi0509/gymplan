@@ -1,13 +1,12 @@
 import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
 import { requireTrainer, ROLE } from "@/lib/auth";
-import { createPlan } from "./actions";
 import PlansListClient from "./PlansListClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const trainer = await requireTrainer();
+  await requireTrainer();
   const plans = await prisma.plan.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -27,62 +26,26 @@ export default async function DashboardPage() {
       <TrainerNav />
       <main className="mx-auto max-w-5xl px-4 pt-6 pb-tabbar md:py-8">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Deine Trainingspläne</h1>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Alle Trainings</h1>
           <p className="mt-1 text-muted">
-            Erstelle einen Wochenplan, sieh die Muskel-Abdeckung live und teile ihn
-            per Link. {exerciseCount} Übungen in der Datenbank.
+            Nur-Lese-Übersicht über alle Trainings aller Kunden. Neue Trainings
+            legst du direkt bei einem Kunden an. {exerciseCount} Übungen in der
+            Datenbank.
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-[1fr_320px]">
-          {/* Plan-Liste mit Kunden-Filter */}
-          <PlansListClient
-            plans={plans.map((p) => ({
-              id: p.id,
-              name: p.name,
-              ownerName: p.ownerName,
-              exerciseCount: p._count.exercises,
-              sessionCount: p._count.sessions,
-              assignedToId: p.assignedToId,
-              assignedToName: p.assignedTo?.displayName ?? null,
-            }))}
-            clients={clients}
-          />
-
-          {/* Neuer Plan */}
-          <aside>
-            <form action={createPlan} className="card space-y-3">
-              <h2 className="text-lg font-semibold">Neuer Plan</h2>
-              <div>
-                <label className="label" htmlFor="name">
-                  Plan-Name
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  className="input"
-                  placeholder="z.B. Ganzkörper Woche A"
-                  required
-                />
-              </div>
-              <div>
-                <label className="label" htmlFor="ownerName">
-                  Trainer
-                </label>
-                <input
-                  id="ownerName"
-                  name="ownerName"
-                  className="input"
-                  placeholder="Dein Name"
-                  defaultValue={trainer.displayName}
-                />
-              </div>
-              <button className="btn-primary w-full" type="submit">
-                Plan erstellen
-              </button>
-            </form>
-          </aside>
-        </div>
+        <PlansListClient
+          plans={plans.map((p) => ({
+            id: p.id,
+            name: p.name,
+            ownerName: p.ownerName,
+            exerciseCount: p._count.exercises,
+            sessionCount: p._count.sessions,
+            assignedToId: p.assignedToId,
+            assignedToName: p.assignedTo?.displayName ?? null,
+          }))}
+          clients={clients}
+        />
       </main>
     </>
   );

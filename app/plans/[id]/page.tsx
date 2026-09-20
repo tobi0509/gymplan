@@ -15,6 +15,7 @@ export default async function PlanPage({
   const plan = await prisma.plan.findUnique({
     where: { id: params.id },
     include: {
+      assignedTo: { select: { id: true, displayName: true } },
       exercises: {
         orderBy: { order: "asc" },
         include: { exercise: { include: { muscles: true } } },
@@ -31,12 +32,21 @@ export default async function PlanPage({
     prisma.muscle.findMany({ orderBy: { name: "asc" } }),
   ]);
 
+  const backHref = plan.assignedTo
+    ? `/clients/${plan.assignedTo.id}/plans`
+    : "/clients";
+  const backLabel = plan.assignedTo
+    ? `${plan.assignedTo.displayName}: Trainings`
+    : "Kunden";
+
   return (
     <>
       <TrainerNav />
       <main className="mx-auto max-w-6xl px-4 pt-6 pb-tabbar md:py-8">
         <PlanBuilderClient
           plan={{ id: plan.id, name: plan.name, shareToken: plan.shareToken }}
+          backHref={backHref}
+          backLabel={backLabel}
           initialItems={plan.exercises.map((pe) => ({
             id: pe.id,
             exerciseId: pe.exerciseId,

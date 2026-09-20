@@ -100,48 +100,6 @@ export async function deleteClientAccount(formData: FormData) {
   redirect("/clients");
 }
 
-export async function assignPlan(formData: FormData) {
-  await requireTrainer();
-  const planId = String(formData.get("planId") || "");
-  const accountId = String(formData.get("accountId") || "");
-  if (!planId) return;
-  // Auch die Detailseite des bisherigen Besitzers aktualisieren (Entfernen/Umziehen)
-  const before = await prisma.plan.findUnique({
-    where: { id: planId },
-    select: { assignedToId: true },
-  });
-  await prisma.plan.update({
-    where: { id: planId },
-    data: { assignedToId: accountId || null },
-  });
-  revalidatePath("/clients");
-  const touched = [accountId, before?.assignedToId].filter(
-    (id, i, arr): id is string => Boolean(id) && arr.indexOf(id) === i,
-  );
-  for (const id of touched) revalidatePath(`/clients/${id}`);
-}
-
-// Programm einem Kunden zuweisen (leere accountId = Zuweisung entfernen).
-export async function assignProgram(formData: FormData) {
-  await requireTrainer();
-  const programId = String(formData.get("programId") || "");
-  const accountId = String(formData.get("accountId") || "");
-  if (!programId) return;
-  const before = await prisma.program.findUnique({
-    where: { id: programId },
-    select: { assignedToId: true },
-  });
-  await prisma.program.update({
-    where: { id: programId },
-    data: { assignedToId: accountId || null },
-  });
-  revalidatePath("/clients");
-  const touched = [accountId, before?.assignedToId].filter(
-    (id, i, arr): id is string => Boolean(id) && arr.indexOf(id) === i,
-  );
-  for (const id of touched) revalidatePath(`/clients/${id}`);
-}
-
 export async function changeOwnPassword(
   _prev: { ok?: boolean; error?: string },
   formData: FormData,

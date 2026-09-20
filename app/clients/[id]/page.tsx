@@ -4,10 +4,9 @@ import TrainerNav from "@/components/TrainerNav";
 import LineChart from "@/components/LineChart";
 import { prisma } from "@/lib/prisma";
 import { requireTrainer, ROLE } from "@/lib/auth";
-import { addDays, startOfWeek, WEEKDAY_LABELS } from "@/lib/schedule";
-import { getEffectiveWeek } from "@/lib/week";
-import { activityStatus, frequencyStatus, weekSyncStatus, getClientTrainingStats } from "@/lib/clientStatus";
-import { assignPlan, assignProgram, deleteClientAccount } from "../actions";
+import { addDays, startOfWeek } from "@/lib/schedule";
+import { activityStatus, frequencyStatus, getClientTrainingStats } from "@/lib/clientStatus";
+import { deleteClientAccount } from "../actions";
 import ResetPasswordButton from "../ResetPasswordButton";
 import { headers } from "next/headers";
 
@@ -27,10 +26,7 @@ export default async function ClientDetailPage({
   const client = await prisma.account.findUnique({
     where: { id: params.id },
     include: {
-      plans: { select: { id: true, name: true, shareToken: true } },
-      programs: { select: { id: true, name: true } },
       trainingPreference: true,
-      standardWeek: { select: { updatedAt: true } },
     },
   });
   if (!client || client.role !== ROLE.CLIENT) notFound();
@@ -40,46 +36,34 @@ export default async function ClientDetailPage({
   const loginUrl = host ? `${proto}://${host}/login` : "/login";
 
   const currentWeekStart = startOfWeek(new Date());
-  const [lastSession, weekSessionCount, stats, allPlans, allPrograms, effectiveWeek] =
-    await Promise.all([
-      prisma.workoutSession.aggregate({
-        where: { clientName: client.displayName, status: "COMPLETED" },
-        _max: { startedAt: true },
-      }),
-      prisma.workoutSession.count({
-        where: {
-          clientName: client.displayName,
-          status: "COMPLETED",
-          startedAt: { gte: currentWeekStart, lt: addDays(currentWeekStart, 7) },
-        },
-      }),
-      getClientTrainingStats(client.displayName),
-      prisma.plan.findMany({
-        orderBy: { name: "asc" },
-        select: {
-          id: true,
-          name: true,
-          assignedTo: { select: { displayName: true } },
-        },
-      }),
-      prisma.program.findMany({
-        orderBy: { name: "asc" },
-        select: {
-          id: true,
-          name: true,
-          assignedTo: { select: { displayName: true } },
-        },
-      }),
-      getEffectiveWeek(client.id, currentWeekStart),
-    ]);
+  const [lastSession, weekSessionCount, stats, plans] = await Promise.all([
+    prisma.workoutSession.aggregate({
+      where: { clientName: client.displayName, status: "COMPLETED" },
+      _max: { startedAt: true },
+    }),
+    prisma.workoutSession.count({
+      where: {
+        clientName: client.displayName,
+        status: "COMPLETED",
+        startedAt: { gte: currentWeekStart, lt: addDays(currentWeekStart, 7) },
+      },
+    }),
+    getClientTrainingStats(client.displayName),
+    prisma.plan.findMany({
+      where: { assignedToId: client.id },
+      orderBy: { order: "asc" },
+      include: {
+        _count: { select: { exercises: true } },
+        sessions: { where: { status: "COMPLETED" }, select: { id: true }, take: 1 },
+      },
+    }),
+  ]);
 
   const act = activityStatus(lastSession._max.startedAt);
   const freq = client.trainingPreference
     ? frequencyStatus(client.trainingPreference.frequency, weekSessionCount)
     : null;
-  const sync = weekSyncStatus(client.trainingPreference, client.standardWeek);
 
-  const planByWeekday = new Map(effectiveWeek.entries.map((e) => [e.weekday, e.plan.name]));
   const labels = stats.sessions.map((s) => shortDate(s.date));
 
   return (
@@ -102,8 +86,8 @@ export default async function ClientDetailPage({
         {/* Quick Actions */}
         <div className="mb-6 flex flex-wrap gap-2">
           <ResetPasswordButton accountId={client.id} loginUrl={loginUrl} />
-          <Link href={`/clients/${client.id}/week`} className="btn-ghost">
-            Wochenprogramm bearbeiten
+          <Link href={`/clients/${client.id}/plans`} className="btn-ghost">
+            Trainings bearbeiten
           </Link>
           <Link href={`/clients/${client.id}/history`} className="btn-ghost">
             Trainingsverlauf
@@ -116,31 +100,42 @@ export default async function ClientDetailPage({
           </form>
         </div>
 
-        {/* Diese Woche */}
-        <div className="card mb-6 space-y-2">
-          <h2 className="text-lg font-semibold">Diese Woche</h2>
-          {client.trainingPreference ? (
+        {/* Verfügbarkeit */}
+        {client.trainingPreference && (
+          <div className="card mb-6 space-y-2">
+            <h2 className="text-lg font-semibold">Verfügbarkeit</h2>
             <p className="text-sm text-muted">
               Möchte {client.trainingPreference.frequency}× pro Woche trainieren
               {freq && <span className={`ml-2 font-medium ${freq.tone}`}>{freq.label}</span>}
-              {sync && <span className={`ml-2 font-medium ${sync.tone}`}>{sync.label}</span>}
             </p>
+          </div>
+        )}
+
+        {/* Trainings */}
+        <div className="card mb-6 space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Trainings</h2>
+            <Link href={`/clients/${client.id}/plans`} className="text-sm text-accent hover:underline">
+              Bearbeiten →
+            </Link>
+          </div>
+          {plans.length === 0 ? (
+            <p className="text-sm text-muted">Noch keine Trainings zugewiesen.</p>
           ) : (
-            <p className="text-sm text-muted">Noch keine Verfügbarkeit angegeben.</p>
-          )}
-          {effectiveWeek.source !== "NONE" ? (
-            <p className="text-sm">
-              {WEEKDAY_LABELS.map((label, d) => (
-                <span key={d} className="mr-3">
-                  <span className="text-muted">{label}: </span>
-                  <span className={planByWeekday.has(d) ? "font-medium text-accent" : "text-muted"}>
-                    {planByWeekday.get(d) ?? "–"}
+            <ol className="space-y-1.5">
+              {plans.map((p, i) => (
+                <li key={p.id} className="flex items-center justify-between text-sm">
+                  <span>
+                    <span className="mr-2 text-muted tabular-nums">{i + 1}.</span>
+                    {p.name}
+                    <span className="ml-2 text-xs text-muted">
+                      {p._count.exercises} Übungen
+                    </span>
                   </span>
-                </span>
+                  {p.sessions.length > 0 && <span className="chip text-accent">✓</span>}
+                </li>
               ))}
-            </p>
-          ) : (
-            <p className="text-sm text-muted">Noch kein Wochenprogramm zugeteilt.</p>
+            </ol>
           )}
         </div>
 
@@ -192,87 +187,6 @@ export default async function ClientDetailPage({
             </div>
           </>
         )}
-
-        {/* Pläne & Programme */}
-        <div className="card space-y-3">
-          <h2 className="text-lg font-semibold">Pläne & Programme</h2>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            {client.programs.map((pr) => (
-              <form key={pr.id} action={assignProgram}>
-                <input type="hidden" name="programId" value={pr.id} />
-                <input type="hidden" name="accountId" value="" />
-                <button
-                  className="chip text-accent hover:text-danger"
-                  type="submit"
-                  title="Programm-Zuweisung entfernen"
-                >
-                  📋 {pr.name} ✕
-                </button>
-              </form>
-            ))}
-            {client.plans.map((p) => (
-              <span key={p.id} className="flex items-center gap-1">
-                <form action={assignPlan}>
-                  <input type="hidden" name="planId" value={p.id} />
-                  <input type="hidden" name="accountId" value="" />
-                  <button
-                    className="chip hover:text-danger"
-                    type="submit"
-                    title="Zuweisung entfernen"
-                  >
-                    {p.name} ✕
-                  </button>
-                </form>
-                <Link
-                  href={`/t/${p.shareToken}/history`}
-                  className="text-xs text-muted hover:text-accent"
-                >
-                  Verlauf
-                </Link>
-              </span>
-            ))}
-            {client.plans.length === 0 && client.programs.length === 0 && (
-              <span className="text-xs text-muted">
-                Noch kein Plan oder Programm zugewiesen.
-              </span>
-            )}
-          </div>
-
-          {allPrograms.length > 0 && (
-            <form action={assignProgram} className="flex gap-2">
-              <input type="hidden" name="accountId" value={client.id} />
-              <select name="programId" className="input flex-1" required>
-                <option value="">Programm zuweisen…</option>
-                {allPrograms.map((pr) => (
-                  <option key={pr.id} value={pr.id}>
-                    📋 {pr.name}
-                    {pr.assignedTo ? ` (bei ${pr.assignedTo.displayName})` : ""}
-                  </option>
-                ))}
-              </select>
-              <button className="btn-ghost" type="submit">
-                Zuweisen
-              </button>
-            </form>
-          )}
-
-          <form action={assignPlan} className="flex gap-2">
-            <input type="hidden" name="accountId" value={client.id} />
-            <select name="planId" className="input flex-1" required>
-              <option value="">Plan auswählen…</option>
-              {allPlans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {p.assignedTo ? ` (bei ${p.assignedTo.displayName})` : ""}
-                </option>
-              ))}
-            </select>
-            <button className="btn-ghost" type="submit">
-              Zuweisen
-            </button>
-          </form>
-        </div>
       </main>
     </>
   );

@@ -18,8 +18,6 @@ export type ClientRow = {
   frequency: null | { label: string; tone: Tone };
   weekdays: number[]; // 0–6
   planNames: string[];
-  programNames: string[];
-  weekWarning: null | { label: string; tone: Tone };
   severity: 0 | 1 | 2;
 };
 
@@ -122,19 +120,14 @@ export default function ClientsListClient({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5">
-            {c.programNames.map((name) => (
-              <span key={name} className="chip text-accent">
-                📋 {name}
-              </span>
-            ))}
             {c.planNames.map((name) => (
               <span key={name} className="chip">
                 {name}
               </span>
             ))}
-            {c.planNames.length === 0 && c.programNames.length === 0 && (
+            {c.planNames.length === 0 && (
               <span className="text-xs text-muted">
-                Noch kein Plan oder Programm zugewiesen.
+                Noch keine Trainings zugewiesen.
               </span>
             )}
           </div>
@@ -158,12 +151,9 @@ export default function ClientsListClient({
               {c.frequency && (
                 <span className={`chip ${c.frequency.tone}`}>{c.frequency.label}</span>
               )}
-              {c.weekWarning && (
-                <span className={`chip ${c.weekWarning.tone}`}>{c.weekWarning.label}</span>
-              )}
             </div>
-            <Link href={`/clients/${c.id}/week`} className="btn-ghost shrink-0">
-              Wochenplan
+            <Link href={`/clients/${c.id}/plans`} className="btn-ghost shrink-0">
+              Trainings
             </Link>
           </div>
         </div>

@@ -3,7 +3,7 @@ import TrainerNav from "@/components/TrainerNav";
 import { prisma } from "@/lib/prisma";
 import { requireTrainer, ROLE } from "@/lib/auth";
 import { parseWeekdays, startOfWeek, addDays } from "@/lib/schedule";
-import { activityStatus, frequencyStatus, weekSyncStatus } from "@/lib/clientStatus";
+import { activityStatus, frequencyStatus } from "@/lib/clientStatus";
 import ClientCreateForm from "./ClientCreateForm";
 import ClientsListClient, { type ClientRow } from "./ClientsListClient";
 
@@ -17,12 +17,8 @@ export default async function ClientsPage() {
     orderBy: { displayName: "asc" },
     include: {
       plans: { select: { name: true } },
-      programs: { select: { name: true } },
       trainingPreference: {
         select: { weekdays: true, frequency: true, updatedAt: true },
-      },
-      standardWeek: {
-        select: { updatedAt: true, _count: { select: { entries: true } } },
       },
     },
   });
@@ -65,13 +61,8 @@ export default async function ClientsPage() {
     const freq = pref
       ? frequencyStatus(pref.frequency, weekCountByName.get(c.displayName) ?? 0)
       : null;
-    const weekWarning = weekSyncStatus(pref, c.standardWeek);
     const sevTone = (t: string | undefined) => (t === "text-danger" ? 2 : t === "text-warn" ? 1 : 0);
-    const severity = Math.max(
-      sevTone(act.tone),
-      sevTone(freq?.tone),
-      sevTone(weekWarning?.tone),
-    ) as 0 | 1 | 2;
+    const severity = Math.max(sevTone(act.tone), sevTone(freq?.tone)) as 0 | 1 | 2;
 
     return {
       id: c.id,
@@ -84,8 +75,6 @@ export default async function ClientsPage() {
       frequency: freq,
       weekdays,
       planNames: c.plans.map((p) => p.name),
-      programNames: c.programs.map((p) => p.name),
-      weekWarning,
       severity,
     };
   });

@@ -41,11 +41,15 @@ type ExOption = {
 
 export default function PlanBuilderClient({
   plan,
+  backHref,
+  backLabel,
   initialItems,
   allExercises,
   muscles,
 }: {
   plan: { id: string; name: string; shareToken: string };
+  backHref: string;
+  backLabel: string;
   initialItems: PlanExerciseDTO[];
   allExercises: ExOption[];
   muscles: Muscle[];
@@ -172,8 +176,8 @@ export default function PlanBuilderClient({
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/" className="text-sm text-muted hover:text-foreground">
-            ← Alle Pläne
+          <Link href={backHref} className="text-sm text-muted hover:text-foreground">
+            ← {backLabel}
           </Link>
           <h1 className="mt-1 text-2xl font-bold tracking-tight md:text-3xl">{plan.name}</h1>
         </div>

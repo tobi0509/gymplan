@@ -34,20 +34,6 @@ export function frequencyStatus(goal: number, completedThisWeek: number, now = n
   return { label: `${base} – nicht mehr erreichbar`, tone: "text-danger" as Tone };
 }
 
-// Stimmt die Standardwoche noch mit der zuletzt geänderten Verfügbarkeit
-// überein? null = nichts Auffälliges zu zeigen.
-export function weekSyncStatus(
-  pref: { updatedAt: Date } | null,
-  standardWeek: { updatedAt: Date } | null,
-): { label: string; tone: Tone } | null {
-  if (!pref) return null;
-  if (!standardWeek) return { label: "Noch nicht zugeteilt", tone: "text-warn" };
-  if (pref.updatedAt > standardWeek.updatedAt) {
-    return { label: "Verfügbarkeit geändert", tone: "text-warn" };
-  }
-  return null;
-}
-
 export type ClientSessionPoint = {
   id: string;
   date: string; // ISO
