@@ -21,18 +21,25 @@ export default async function ClientPlansPage({
   const account = await prisma.account.findUnique({ where: { id: params.id } });
   if (!account || account.role !== ROLE.CLIENT) notFound();
 
-  const plans = await prisma.plan.findMany({
-    where: { assignedToId: client.id },
-    orderBy: { order: "asc" },
-    include: {
-      _count: { select: { exercises: true } },
-      sessions: {
-        where: { status: "COMPLETED" },
-        select: { id: true },
-        take: 1,
+  const [plans, clients] = await Promise.all([
+    prisma.plan.findMany({
+      where: { assignedToId: client.id },
+      orderBy: { order: "asc" },
+      include: {
+        _count: { select: { exercises: true } },
+        sessions: {
+          where: { status: "COMPLETED" },
+          select: { id: true },
+          take: 1,
+        },
       },
-    },
-  });
+    }),
+    prisma.account.findMany({
+      where: { role: ROLE.CLIENT },
+      orderBy: { displayName: "asc" },
+      select: { id: true, displayName: true },
+    }),
+  ]);
 
   const entries: QueueEntry[] = plans.map((p) => ({
     id: p.id,
@@ -60,7 +67,11 @@ export default async function ClientPlansPage({
           </p>
         </div>
 
-        <PlanQueueClient accountId={client.id} initialItems={entries} />
+        <PlanQueueClient
+          accountId={client.id}
+          initialItems={entries}
+          clients={clients}
+        />
       </main>
     </>
   );

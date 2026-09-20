@@ -70,3 +70,61 @@ export async function reorderQueueEntries(accountId: string, orderedIds: string[
   );
   return { ok: true };
 }
+
+// Kopiert ein Training (inkl. Übungen) als neuen, unabhängigen Eintrag auf die
+// Warteschlange von targetAccountId — auch derselbe Kunde wie der Quell-Plan
+// (= "nochmal eintragen"). Ziel-Wdh./-Gewicht werden bewusst nicht mitkopiert;
+// Verlauf (WorkoutSession/SetLog) bleibt exklusiv beim Original.
+export async function copyPlanToClient(
+  sourcePlanId: string,
+  targetAccountId: string,
+): Promise<{ ok: true; newPlanId: string; sameClient: boolean }> {
+  const trainer = await requireTrainer();
+  await requireClientAccount(targetAccountId);
+  const source = await prisma.plan.findUnique({
+    where: { id: sourcePlanId },
+    include: { exercises: { orderBy: { order: "asc" } } },
+  });
+  if (!source) throw new Error("Training nicht gefunden");
+
+  const newPlan = await prisma.$transaction(async (tx) => {
+    const max = await tx.plan.aggregate({
+      where: { assignedToId: targetAccountId },
+      _max: { order: true },
+    });
+    const created = await tx.plan.create({
+      data: {
+        name: source.name,
+        ownerName: trainer.displayName,
+        assignedToId: targetAccountId,
+        order: (max._max.order ?? -1) + 1,
+      },
+    });
+    if (source.exercises.length) {
+      await tx.planExercise.createMany({
+        data: source.exercises.map((pe) => ({
+          planId: created.id,
+          exerciseId: pe.exerciseId,
+          order: pe.order,
+          sets: pe.sets,
+          targetReps: null,
+          targetWeight: null,
+        })),
+      });
+    }
+    return created;
+  });
+
+  revalidatePath(`/clients/${targetAccountId}/plans`);
+  revalidatePath(`/clients/${targetAccountId}`);
+  if (source.assignedToId && source.assignedToId !== targetAccountId) {
+    revalidatePath(`/clients/${source.assignedToId}/plans`);
+    revalidatePath(`/clients/${source.assignedToId}`);
+  }
+
+  return {
+    ok: true,
+    newPlanId: newPlan.id,
+    sameClient: source.assignedToId === targetAccountId,
+  };
+}

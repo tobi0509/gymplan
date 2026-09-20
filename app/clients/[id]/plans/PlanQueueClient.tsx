@@ -24,6 +24,7 @@ import {
   renameQueueEntry,
   deleteQueueEntry,
   reorderQueueEntries,
+  copyPlanToClient,
 } from "./actions";
 
 export type QueueEntry = {
@@ -33,14 +34,19 @@ export type QueueEntry = {
   done: boolean;
 };
 
+export type ClientOption = { id: string; displayName: string };
+
 export default function PlanQueueClient({
   accountId,
   initialItems,
+  clients,
 }: {
   accountId: string;
   initialItems: QueueEntry[];
+  clients: ClientOption[];
 }) {
   const [items, setItems] = useState<QueueEntry[]>(initialItems);
+  const [notice, setNotice] = useState<string | null>(null);
   const [, start] = useTransition();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -78,6 +84,27 @@ export default function PlanQueueClient({
     });
   }
 
+  function copy(
+    id: string,
+    name: string,
+    exerciseCount: number,
+    targetAccountId: string,
+    targetName: string,
+  ) {
+    start(async () => {
+      const res = await copyPlanToClient(id, targetAccountId);
+      if (targetAccountId === accountId) {
+        setItems((prev) => [
+          ...prev,
+          { id: res.newPlanId, name, exerciseCount, done: false },
+        ]);
+      } else {
+        setNotice(`An ${targetName} kopiert ✓`);
+        setTimeout(() => setNotice(null), 2500);
+      }
+    });
+  }
+
   function move(id: string, dir: "up" | "down") {
     const idx = items.findIndex((it) => it.id === id);
     const swapWith = dir === "up" ? idx - 1 : idx + 1;
@@ -94,6 +121,10 @@ export default function PlanQueueClient({
 
   return (
     <div className="space-y-3">
+      {notice && (
+        <div className="card border-accent/40 text-sm text-accent">{notice}</div>
+      )}
+
       {items.length === 0 && (
         <div className="card text-muted">
           Noch keine Trainings. Füge unten das erste Training hinzu.
@@ -115,11 +146,13 @@ export default function PlanQueueClient({
               item={it}
               index={idx}
               accountId={accountId}
+              clients={clients}
               isFirst={idx === 0}
               isLast={idx === items.length - 1}
               isNextUp={it.id === nextUpId}
               onMove={move}
               onRemove={remove}
+              onCopy={copy}
             />
           ))}
         </SortableContext>
@@ -145,24 +178,36 @@ function QueueCard({
   item,
   index,
   accountId,
+  clients,
   isFirst,
   isLast,
   isNextUp,
   onMove,
   onRemove,
+  onCopy,
 }: {
   item: QueueEntry;
   index: number;
   accountId: string;
+  clients: ClientOption[];
   isFirst: boolean;
   isLast: boolean;
   isNextUp: boolean;
   onMove: (id: string, dir: "up" | "down") => void;
   onRemove: (id: string, hasSessions: boolean) => void;
+  onCopy: (
+    id: string,
+    name: string,
+    exerciseCount: number,
+    targetAccountId: string,
+    targetName: string,
+  ) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: item.id });
   const [editing, setEditing] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [target, setTarget] = useState("");
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -239,6 +284,14 @@ function QueueCard({
           >
             ▼
           </button>
+          <button
+            className="btn-ghost px-2 py-1"
+            onClick={() => setCopying((v) => !v)}
+            aria-label={`${item.name} kopieren`}
+            title="An einen Kunden kopieren (auch denselben, für nochmal eintragen)"
+          >
+            Kopieren
+          </button>
           <Link href={`/plans/${item.id}`} className="btn-ghost px-2 py-1">
             Bearbeiten
           </Link>
@@ -250,6 +303,39 @@ function QueueCard({
           </button>
         </div>
       </div>
+
+      {copying && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 pl-8">
+          <select
+            className="input flex-1"
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+          >
+            <option value="">An welchen Kunden?</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.id === accountId ? `${c.displayName} (nochmal eintragen)` : c.displayName}
+              </option>
+            ))}
+          </select>
+          <button
+            className="btn-primary px-3 py-1.5 text-sm"
+            disabled={!target}
+            onClick={() => {
+              const chosen = clients.find((c) => c.id === target);
+              if (!chosen) return;
+              onCopy(item.id, item.name, item.exerciseCount, chosen.id, chosen.displayName);
+              setCopying(false);
+              setTarget("");
+            }}
+          >
+            Kopieren
+          </button>
+          <button className="btn-ghost px-3 py-1.5 text-sm" onClick={() => setCopying(false)}>
+            Abbrechen
+          </button>
+        </div>
+      )}
     </div>
   );
 }
