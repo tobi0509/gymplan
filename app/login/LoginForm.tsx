@@ -1,10 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { login, type LoginState } from "./actions";
+import { clearPageCache } from "@/components/ServiceWorker";
 
 export default function LoginForm() {
   const [state, formAction] = useFormState<LoginState, FormData>(login, {});
+  // Login-Seite = ausgeloggt: offline gespeicherte Seiten des vorherigen
+  // Accounts verwerfen
+  useEffect(() => clearPageCache(), []);
 
   return (
     <form action={formAction} className="card space-y-3">
