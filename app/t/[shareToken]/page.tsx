@@ -72,7 +72,7 @@ export default async function ClientPlanPage({
   }));
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <main className="mx-auto max-w-2xl px-4 pb-8 pt-[calc(2rem+env(safe-area-inset-top))]">
       <div className="mb-6 text-center">
         <div className="text-xs uppercase tracking-widest text-muted">
           Trainingsplan von {plan.ownerName}

@@ -21,7 +21,7 @@ export default async function ProgressPage() {
   const recent = [...stats.sessions].reverse().slice(0, 10);
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 md:py-8">
+    <main className="mx-auto max-w-2xl px-4 pb-6 pt-[calc(1.5rem+env(safe-area-inset-top))] md:pb-8 md:pt-[calc(2rem+env(safe-area-inset-top))]">
       <div className="mb-6">
         <div className="text-xs uppercase tracking-widest text-muted">
           GymPlan
@@ -94,7 +94,7 @@ export default async function ProgressPage() {
               <Link
                 key={s.id}
                 href={`/t/${s.shareToken}/history`}
-                className="card flex items-center justify-between hover:border-accent/40"
+                className="card flex flex-wrap items-center justify-between gap-2 hover:border-accent/40"
               >
                 <div>
                   <div className="text-sm font-medium">{s.planName}</div>
@@ -107,7 +107,7 @@ export default async function ProgressPage() {
                     })}
                   </div>
                 </div>
-                <div className="flex gap-1.5 text-xs">
+                <div className="flex flex-wrap gap-1.5 text-xs">
                   {s.motivation != null && (
                     <span className="chip">Motivation {s.motivation}</span>
                   )}
@@ -136,7 +136,7 @@ function Stat({
   return (
     <div className="card-2">
       <div className="text-xs uppercase tracking-wide text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-black tabular-nums">
+      <div className="mt-1 break-words text-xl font-black tabular-nums sm:text-2xl">
         {value}
         {suffix && <span className="text-sm font-medium text-muted">{suffix}</span>}
       </div>

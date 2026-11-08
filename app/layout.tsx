@@ -24,6 +24,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#08090b",
+  // Native Controls (Picker, Autofill, Scrollbars) im dunklen Stil
+  colorScheme: "dark",
   width: "device-width",
   initialScale: 1,
   // Nötig, damit env(safe-area-inset-*) auf Geräten mit Notch/Home-Indicator

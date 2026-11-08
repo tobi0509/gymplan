@@ -20,10 +20,15 @@ export type TabItem = {
 export default function TabBar({
   items,
   withSpacer = true,
+  allWidths = false,
 }: {
   items: TabItem[];
   withSpacer?: boolean;
+  // true: auch ab md sichtbar (Kunden haben keine andere Navigation — sonst
+  // säßen sie am Tablet/im Querformat ohne Navigation fest)
+  allWidths?: boolean;
 }) {
+  const hideMd = allWidths ? "" : "md:hidden";
   const pathname = usePathname();
 
   const isActive = (item: TabItem) => {
@@ -37,13 +42,13 @@ export default function TabBar({
 
   return (
     <>
-      {withSpacer && <div aria-hidden className="h-16 pb-safe md:hidden" />}
+      {withSpacer && <div aria-hidden className={`h-16 pb-safe ${hideMd}`} />}
       <nav
         aria-label="Hauptnavigation"
-        className="fixed inset-x-0 bottom-0 z-40 border-t bg-base/90 pb-safe backdrop-blur md:hidden"
+        className={`fixed inset-x-0 bottom-0 z-40 border-t bg-base/90 pb-safe backdrop-blur ${hideMd}`}
       >
         <div
-          className="grid"
+          className="mx-auto grid max-w-2xl"
           style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}
         >
           {items.map((item) => {
@@ -58,7 +63,7 @@ export default function TabBar({
                 }`}
               >
                 <Icon name={item.icon} className="h-6 w-6" />
-                <span className="text-[10px] font-medium tracking-wide">
+                <span className="text-[11px] font-medium tracking-wide">
                   {item.label}
                 </span>
               </Link>

@@ -25,7 +25,8 @@ export default function QueueList({ items }: { items: QueueItem[] }) {
               isNextUp ? "bg-surface-2 ring-1 ring-accent" : ""
             } ${it.done ? "opacity-60" : ""}`}
           >
-            <div className="flex items-center gap-2.5">
+            {/* Name/Zeile → Plan-Vorschau mit Übungsliste */}
+            <Link href={`/t/${it.shareToken}`} className="flex min-w-0 flex-1 items-center gap-2.5">
               <span
                 className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs font-semibold ${
                   it.done ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted"
@@ -33,26 +34,32 @@ export default function QueueList({ items }: { items: QueueItem[] }) {
               >
                 {it.done ? "✓" : i + 1}
               </span>
-              <div>
-                <div className="font-medium">{it.name}</div>
+              <div className="min-w-0">
+                <div className="break-words font-medium">{it.name}</div>
                 <div className="text-xs text-muted">
                   {it.exerciseCount} Übungen
-                  {isNextUp && <span className="ml-2 chip text-accent">Als Nächstes</span>}
+                  {isNextUp && <span className="ml-2 chip whitespace-nowrap text-accent">Als Nächstes</span>}
                 </div>
               </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
+            </Link>
+            <div className="flex shrink-0 items-center gap-1">
               <Link
                 href={`/t/${it.shareToken}/history`}
-                className="text-sm text-muted hover:text-accent"
+                className="grid h-11 place-items-center rounded-xl px-2 text-sm text-muted hover:text-accent"
               >
                 Verlauf
               </Link>
+              {/* Direkt ins Training — ohne Umweg über die Vorschau */}
               <Link
-                href={`/t/${it.shareToken}`}
+                href={
+                  it.exerciseCount > 0
+                    ? `/t/${it.shareToken}/session`
+                    : `/t/${it.shareToken}`
+                }
                 className={isNextUp ? "btn-primary" : "btn-ghost"}
+                aria-label={`${it.name} starten`}
               >
-                Trainieren
+                ▶ Start
               </Link>
             </div>
           </div>

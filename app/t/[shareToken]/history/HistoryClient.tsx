@@ -173,7 +173,7 @@ function Stat({
   return (
     <div className="card-2">
       <div className="text-xs uppercase tracking-wide text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-black tabular-nums">
+      <div className="mt-1 break-words text-xl font-black tabular-nums sm:text-2xl">
         {value}
         {suffix && <span className="text-sm font-medium text-muted">{suffix}</span>}
       </div>

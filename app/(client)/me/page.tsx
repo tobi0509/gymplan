@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAccount, ROLE } from "@/lib/auth";
 import QueueList, { type QueueItem } from "./QueueList";
+import ResumeBanner from "./ResumeBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export default async function MePage() {
   }));
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 md:py-8">
+    <main className="mx-auto max-w-2xl px-4 pb-6 pt-[calc(1.5rem+env(safe-area-inset-top))] md:pb-8 md:pt-[calc(2rem+env(safe-area-inset-top))]">
       <div className="mb-6">
         <div className="text-xs uppercase tracking-widest text-muted">
           GymPlan
@@ -49,6 +50,11 @@ export default async function MePage() {
         </h1>
         <p className="text-muted">{totalSessions} abgeschlossene Trainings</p>
       </div>
+
+      <ResumeBanner
+        plans={items.map((it) => ({ id: it.id, name: it.name, shareToken: it.shareToken }))}
+        clientName={account.displayName}
+      />
 
       {items.length > 0 && (
         <section className="mb-6">

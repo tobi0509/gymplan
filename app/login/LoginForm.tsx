@@ -18,6 +18,8 @@ export default function LoginForm() {
           className="input"
           autoComplete="username"
           autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           required
         />
       </div>

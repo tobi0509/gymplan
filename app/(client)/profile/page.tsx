@@ -29,7 +29,7 @@ export default async function ProfilePage({
   const weekdays = preference ? parseWeekdays(preference.weekdays) : [];
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 md:py-8">
+    <main className="mx-auto max-w-2xl px-4 pb-6 pt-[calc(1.5rem+env(safe-area-inset-top))] md:pb-8 md:pt-[calc(2rem+env(safe-area-inset-top))]">
       <div className="mb-6">
         <div className="text-xs uppercase tracking-widest text-muted">
           GymPlan

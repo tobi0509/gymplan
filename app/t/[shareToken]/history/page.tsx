@@ -24,7 +24,7 @@ export default async function HistoryPage({
   const { clientName, sessions } = await getHistory(params.shareToken);
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
+    <main className="mx-auto max-w-2xl px-4 pb-8 pt-[calc(2rem+env(safe-area-inset-top))]">
       <div className="mb-6">
         <Link
           href={`/t/${params.shareToken}`}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
 import { WEEKDAY_LABELS } from "@/lib/schedule";
 import { saveTrainingPreference } from "./actions";
 
@@ -117,11 +118,18 @@ export default function PreferenceCard({
               Abbrechen
             </button>
           )}
-          <button className="btn-primary flex-1" type="submit">
-            Speichern
-          </button>
+          <SaveButton />
         </div>
       </form>
     </section>
+  );
+}
+
+function SaveButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button className="btn-primary flex-1" type="submit" disabled={pending}>
+      {pending ? "Speichert…" : "Speichern"}
+    </button>
   );
 }

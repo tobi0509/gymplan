@@ -4,6 +4,7 @@
 
 /* Bevel × Whoop – dunkles, weiches, datenstarkes Theme */
 :root {
+  color-scheme: dark;
   --base: #08090b;
   --surface: #121417;
   --surface-2: #191c21;
@@ -60,7 +61,7 @@ summary {
     @apply rounded-xl border bg-surface-2 p-4;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none;
   }
   .btn-primary {
     @apply btn bg-accent text-black hover:brightness-110 shadow-glow;
@@ -73,7 +74,7 @@ summary {
   }
   .input {
     /* 16px auf Mobile — verhindert den automatischen iOS-Zoom beim Fokus */
-    @apply w-full rounded-xl border bg-surface-2 px-3 py-2.5 text-base text-foreground outline-none placeholder:text-muted focus:border-accent md:text-sm;
+    @apply w-full rounded-xl border bg-surface-2 px-3 py-2.5 text-base text-foreground outline-none placeholder:text-muted focus:border-accent;
   }
   .label {
     @apply mb-1 block text-xs font-medium uppercase tracking-wide text-muted;

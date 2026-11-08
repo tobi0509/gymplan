@@ -14,5 +14,5 @@ export default function ClientTabBar() {
   const pathname = usePathname();
   // Fokus-Modus: während des Workouts keine Tab-Bar (und kein Spacer)
   if (/^\/t\/[^/]+\/session/.test(pathname)) return null;
-  return <TabBar items={CLIENT_TABS} />;
+  return <TabBar items={CLIENT_TABS} allWidths />;
 }
