@@ -19,14 +19,23 @@ function longDate(iso: string) {
   });
 }
 
+export type ClientNote = {
+  exerciseId: string;
+  exerciseName: string;
+  text: string;
+  updatedAt: string; // ISO
+};
+
 export default function ClientHistoryClient({
   accountId,
   sessions,
   exerciseOptions,
+  notes,
 }: {
   accountId: string;
   sessions: ClientHistorySession[];
   exerciseOptions: ExerciseOption[];
+  notes: ClientNote[];
 }) {
   const [exerciseId, setExerciseId] = useState("");
   const [progress, setProgress] = useState<ExerciseProgressPoint[] | null>(null);
@@ -83,6 +92,26 @@ export default function ClientHistoryClient({
           )
         )}
       </div>
+
+      {/* Übungs-Notizen des Kunden (read-only) */}
+      {notes.length > 0 && (
+        <div className="card space-y-3">
+          <h2 className="text-lg font-semibold">Notizen des Kunden</h2>
+          <div className="space-y-2">
+            {notes.map((n) => (
+              <div key={n.exerciseId} className="rounded-xl bg-surface-2 px-3 py-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                  <span className="text-sm font-medium">{n.exerciseName}</span>
+                  <span className="text-xs text-muted">{longDate(n.updatedAt)}</span>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted">
+                  {n.text}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Letzte Trainings */}
       <div className="space-y-3">

@@ -79,6 +79,15 @@ export default async function SessionPage({
     }
   }
 
+  // Persönliche Übungs-Notizen (planübergreifend, je Übung eine)
+  const noteRows = await prisma.exerciseNote.findMany({
+    where: { accountId: account.id, exerciseId: { in: exerciseIds } },
+  });
+  const notes: Record<string, { text: string; updatedAt: string }> = {};
+  for (const n of noteRows) {
+    notes[n.exerciseId] = { text: n.text, updatedAt: n.updatedAt.toISOString() };
+  }
+
   return (
     <SessionFlowClient
       shareToken={params.shareToken}
@@ -97,6 +106,7 @@ export default async function SessionPage({
       }))}
       lastLogs={lastLogs}
       maxWeights={maxWeights}
+      notes={notes}
     />
   );
 }

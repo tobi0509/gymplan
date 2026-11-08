@@ -288,3 +288,32 @@ export async function getHistory(shareToken: string): Promise<{
 
   return { clientName, sessions: mapped };
 }
+
+// Persönliche Notiz zu einer Übung (planübergreifend) speichern. Leerer Text
+// löscht die Notiz. Sofort gespeichert — überlebt auch ein abgebrochenes
+// Training.
+const NOTE_MAX_LEN = 1000;
+export async function saveExerciseNote(
+  exerciseId: string,
+  text: string,
+): Promise<{ text: string; updatedAt: string | null }> {
+  const account = await requireAccount();
+  const clean = text.trim().slice(0, NOTE_MAX_LEN);
+  if (!clean) {
+    await prisma.exerciseNote.deleteMany({
+      where: { accountId: account.id, exerciseId },
+    });
+    return { text: "", updatedAt: null };
+  }
+  const exists = await prisma.exercise.findUnique({
+    where: { id: exerciseId },
+    select: { id: true },
+  });
+  if (!exists) throw new Error("Übung nicht gefunden");
+  const note = await prisma.exerciseNote.upsert({
+    where: { accountId_exerciseId: { accountId: account.id, exerciseId } },
+    update: { text: clean },
+    create: { accountId: account.id, exerciseId, text: clean },
+  });
+  return { text: note.text, updatedAt: note.updatedAt.toISOString() };
+}

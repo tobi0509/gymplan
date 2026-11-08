@@ -17,10 +17,21 @@ export default async function ClientHistoryPage({
   const client = await prisma.account.findUnique({ where: { id: params.id } });
   if (!client || client.role !== ROLE.CLIENT) notFound();
 
-  const [sessions, exerciseOptions] = await Promise.all([
+  const [sessions, exerciseOptions, noteRows] = await Promise.all([
     getClientHistory(client.displayName),
     getExerciseOptions(client.displayName),
+    prisma.exerciseNote.findMany({
+      where: { accountId: client.id },
+      include: { exercise: { select: { name: true } } },
+      orderBy: { updatedAt: "desc" },
+    }),
   ]);
+  const notes = noteRows.map((n) => ({
+    exerciseId: n.exerciseId,
+    exerciseName: n.exercise.name,
+    text: n.text,
+    updatedAt: n.updatedAt.toISOString(),
+  }));
 
   return (
     <>
@@ -37,6 +48,7 @@ export default async function ClientHistoryPage({
           accountId={client.id}
           sessions={sessions}
           exerciseOptions={exerciseOptions}
+          notes={notes}
         />
       </main>
     </>
