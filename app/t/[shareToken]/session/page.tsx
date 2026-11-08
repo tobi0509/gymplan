@@ -23,6 +23,8 @@ export default async function SessionPage({
   });
   if (!plan) notFound();
   if (!(await mayAccessPlan(account, plan))) notFound();
+  // Archivierte (gelöschte) Pläne nur noch im Verlauf, nicht mehr trainierbar
+  if (plan.archivedAt) redirect(`/t/${params.shareToken}/history`);
   // Ohne Übungen gibt es nichts zu trainieren — die Workout-Phase würde
   // an exercises[0] scheitern (StartGate sperrt nur den Button, nicht die URL).
   if (plan.exercises.length === 0) redirect(`/t/${params.shareToken}`);

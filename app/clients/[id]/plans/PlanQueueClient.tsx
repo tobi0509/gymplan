@@ -19,6 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useUndo } from "@/components/useUndo";
 import {
   createQueueEntry,
   renameQueueEntry,
@@ -48,32 +49,42 @@ export default function PlanQueueClient({
   const [items, setItems] = useState<QueueEntry[]>(initialItems);
   const [notice, setNotice] = useState<string | null>(null);
   const [, start] = useTransition();
+  const undo = useUndo();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  function remove(id: string, hasSessions: boolean) {
-    if (
-      hasSessions &&
-      !confirm(
-        "Dieser Eintrag hat bereits abgeschlossene Trainings — der gesamte Verlauf dazu geht beim Löschen verloren. Trotzdem löschen?",
-      )
-    ) {
-      return;
-    }
+  // Löschen mit Rückgängig. Trainings mit Verlauf werden serverseitig nur
+  // archiviert — Verlauf & Fortschritt des Kunden bleiben erhalten.
+  function remove(id: string) {
+    const idx = items.findIndex((it) => it.id === id);
+    const item = items[idx];
+    if (!item) return;
     setItems((prev) => prev.filter((it) => it.id !== id));
-    const fd = new FormData();
-    fd.set("id", id);
-    fd.set("accountId", accountId);
-    start(async () => {
-      await deleteQueueEntry(fd);
-    });
+    undo.schedule(
+      `„${item.name}" gelöscht`,
+      () => {
+        const fd = new FormData();
+        fd.set("id", id);
+        fd.set("accountId", accountId);
+        start(async () => {
+          await deleteQueueEntry(fd);
+        });
+      },
+      () =>
+        setItems((prev) => {
+          const next = prev.slice();
+          next.splice(Math.min(idx, next.length), 0, item);
+          return next;
+        }),
+    );
   }
 
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
+    undo.flush();
     const oldIndex = items.findIndex((it) => it.id === active.id);
     const newIndex = items.findIndex((it) => it.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
@@ -109,6 +120,7 @@ export default function PlanQueueClient({
     const idx = items.findIndex((it) => it.id === id);
     const swapWith = dir === "up" ? idx - 1 : idx + 1;
     if (idx === -1 || swapWith < 0 || swapWith >= items.length) return;
+    undo.flush();
     const next = items.slice();
     [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
     setItems(next);
@@ -121,6 +133,7 @@ export default function PlanQueueClient({
 
   return (
     <div className="space-y-3">
+      {undo.toastNode}
       {notice && (
         <div className="card border-accent/40 text-sm text-accent">{notice}</div>
       )}
@@ -194,7 +207,7 @@ function QueueCard({
   isLast: boolean;
   isNextUp: boolean;
   onMove: (id: string, dir: "up" | "down") => void;
-  onRemove: (id: string, hasSessions: boolean) => void;
+  onRemove: (id: string) => void;
   onCopy: (
     id: string,
     name: string,
@@ -207,6 +220,7 @@ function QueueCard({
     useSortable({ id: item.id });
   const [editing, setEditing] = useState(false);
   const [copying, setCopying] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [target, setTarget] = useState("");
 
   const style = {
@@ -220,7 +234,9 @@ function QueueCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-1 items-start gap-1">
           <button
-            className="mt-0.5 grid h-6 w-6 shrink-0 cursor-grab place-items-center rounded-lg text-muted hover:bg-surface-2 active:cursor-grabbing"
+            className="-ml-2 -mt-2 grid h-11 w-11 shrink-0 cursor-grab place-items-center rounded-lg text-lg text-muted hover:bg-surface-2 active:cursor-grabbing"
+            // touch-action: none — sonst scrollt der Browser am Handy, statt zu ziehen
+            style={{ touchAction: "none" }}
             aria-label="Ziehen zum Umsortieren"
             {...attributes}
             {...listeners}
@@ -262,12 +278,22 @@ function QueueCard({
                 <span className="chip text-accent">Als Nächstes</span>
               )}
             </div>
-            <div className="mt-0.5 pl-8 text-xs text-muted">
+            <div className="mt-0.5 text-xs text-muted sm:pl-8">
               {item.exerciseCount} Übungen
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-0.5">
+        {/* Handy: alle Aktionen gesammelt hinter ⋯ — sonst bleibt neben fünf
+            Buttons kein Platz für den Namen */}
+        <button
+          className="btn-ghost shrink-0 px-3 text-lg sm:hidden"
+          onClick={() => setMenuOpen(true)}
+          aria-label={`Aktionen für ${item.name}`}
+          aria-haspopup="dialog"
+        >
+          ⋯
+        </button>
+        <div className="hidden items-center gap-0.5 sm:flex">
           <button
             className="btn-ghost px-2 py-1"
             onClick={() => onMove(item.id, "up")}
@@ -297,15 +323,73 @@ function QueueCard({
           </Link>
           <button
             className="btn-ghost px-2 py-1 text-danger"
-            onClick={() => onRemove(item.id, item.done)}
+            onClick={() => onRemove(item.id)}
           >
             ✕
           </button>
         </div>
       </div>
 
+      {menuOpen && (
+        <div
+          className="fixed inset-0 z-50 !mt-0 flex items-end bg-black/60 backdrop-blur-sm sm:hidden"
+          onClick={() => setMenuOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Aktionen für ${item.name}`}
+        >
+          <div
+            className="w-full space-y-1 rounded-t-3xl border-t bg-surface px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 animate-pop-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-border" />
+            <div className="mb-2 truncate px-1 text-sm font-semibold text-muted">{item.name}</div>
+            {(
+              [
+                { label: "✎ Übungen bearbeiten", href: `/plans/${item.id}` },
+                { label: "Umbenennen", run: () => setEditing(true) },
+                { label: "▲ Nach oben", run: () => onMove(item.id, "up"), disabled: isFirst },
+                { label: "▼ Nach unten", run: () => onMove(item.id, "down"), disabled: isLast },
+                { label: "Kopieren …", run: () => setCopying(true) },
+                { label: "Löschen", run: () => onRemove(item.id), danger: true },
+              ] as { label: string; href?: string; run?: () => void; disabled?: boolean; danger?: boolean }[]
+            ).map((a) =>
+              a.href ? (
+                <Link
+                  key={a.label}
+                  href={a.href}
+                  className="flex h-12 w-full items-center rounded-xl px-3 font-medium hover:bg-surface-2"
+                >
+                  {a.label}
+                </Link>
+              ) : (
+                <button
+                  key={a.label}
+                  disabled={a.disabled}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    a.run?.();
+                  }}
+                  className={`flex h-12 w-full items-center rounded-xl px-3 text-left font-medium hover:bg-surface-2 disabled:opacity-40 ${
+                    a.danger ? "text-danger" : ""
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ),
+            )}
+            <button
+              className="btn-ghost mt-2 w-full"
+              onClick={() => setMenuOpen(false)}
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
+
       {copying && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 pl-8">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 sm:pl-8">
           <select
             className="input flex-1"
             value={target}

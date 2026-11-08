@@ -101,33 +101,37 @@ export default function ExercisesClient({
 
   return (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => setFilter("ALL")}
-          className={`chip ${filter === "ALL" ? "pill-active" : ""}`}
-        >
-          Alle
-        </button>
-        {EQUIPMENT.map((eq) => (
-          <button
-            key={eq}
-            onClick={() => setFilter(eq)}
-            className={`chip ${filter === eq ? "pill-active" : ""}`}
-          >
-            {EQUIPMENT_LABEL[eq]}
-          </button>
-        ))}
-        <div className="ml-auto flex items-center gap-2">
+      {/* Toolbar: Suche volle Breite, Filter-Chips am Handy als
+          horizontal scrollbare Zeile statt 3–4 umbrechender Reihen */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
           <input
-            className="input w-48"
+            className="input flex-1 md:max-w-xs"
+            type="search"
             placeholder="Suchen…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <button className="btn-primary whitespace-nowrap" onClick={openNew}>
-            + Neue Übung
+            + Neu
           </button>
+        </div>
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] md:mx-0 md:flex-wrap md:px-0">
+          <button
+            onClick={() => setFilter("ALL")}
+            className={`chip shrink-0 px-3 py-2 ${filter === "ALL" ? "pill-active" : ""}`}
+          >
+            Alle
+          </button>
+          {EQUIPMENT.map((eq) => (
+            <button
+              key={eq}
+              onClick={() => setFilter(eq)}
+              className={`chip shrink-0 px-3 py-2 ${filter === eq ? "pill-active" : ""}`}
+            >
+              {EQUIPMENT_LABEL[eq]}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -164,12 +168,17 @@ export default function ExercisesClient({
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button className="btn-ghost px-2 py-1" onClick={() => openEdit(e)}>
+                  <button
+                    className="btn-ghost px-3"
+                    onClick={() => openEdit(e)}
+                    aria-label={`${e.name} bearbeiten`}
+                  >
                     ✎
                   </button>
                   <button
-                    className="btn-ghost px-2 py-1 text-danger"
+                    className="btn-ghost px-3 text-danger"
                     onClick={() => remove(e.id)}
+                    aria-label={`${e.name} löschen`}
                   >
                     ✕
                   </button>
@@ -233,6 +242,14 @@ function Editor({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [urlValue, setUrlValue] = useState(draft.imageUrl ?? "");
+  // Ausgangsstand merken: Schließen mit ungespeicherten Änderungen fragt nach
+  // (am Handy tippt man beim Scrollen leicht auf den Hintergrund)
+  const [initial] = useState(() => JSON.stringify(draft));
+  const dirty = JSON.stringify(draft) !== initial;
+  function requestClose() {
+    if (dirty && !confirm("Ungespeicherte Änderungen verwerfen?")) return;
+    onCancel();
+  }
 
   async function onImportUrl() {
     const url = urlValue.trim();
@@ -293,11 +310,11 @@ function Editor({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 pb-safe backdrop-blur-sm"
-      onClick={onCancel}
+      className="fixed inset-0 z-50 !mt-0 flex items-start justify-center overflow-y-auto overscroll-contain bg-black/60 px-4 pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-sm md:pt-8"
+      onClick={requestClose}
     >
       <div
-        className="card my-8 w-full max-w-lg space-y-4"
+        className="card w-full max-w-lg space-y-4 pb-0"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold">
@@ -422,7 +439,9 @@ function Editor({
               Summe: {sum}%
             </span>
           </div>
-          <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+          {/* Keine verschachtelte Scroll-Box mehr; am Handy ±-Buttons statt
+              winziger Slider (20 Stufen auf ~90 px) */}
+          <div className="space-y-3">
             {Object.entries(groups).map(([group, ms]) => (
               <div key={group}>
                 <div className="mb-1 text-xs uppercase tracking-wide text-muted">
@@ -430,8 +449,10 @@ function Editor({
                 </div>
                 <div className="space-y-2">
                   {ms.map((m) => (
-                    <div key={m.id} className="flex items-center gap-3">
-                      <span className="w-36 text-sm">{m.name}</span>
+                    <div key={m.id} className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 text-sm sm:w-36 sm:flex-none">
+                        {m.name}
+                      </span>
                       <input
                         type="range"
                         min={0}
@@ -439,11 +460,34 @@ function Editor({
                         step={5}
                         value={pctFor(m.id)}
                         onChange={(e) => setPct(m.id, Number(e.target.value))}
-                        className="flex-1"
+                        className="hidden flex-1 sm:block"
+                        aria-label={`${m.name} Anteil`}
                       />
-                      <span className="w-10 text-right text-sm tabular-nums">
+                      <button
+                        type="button"
+                        className="btn-ghost px-3 sm:hidden"
+                        onClick={() => setPct(m.id, Math.max(0, pctFor(m.id) - 5))}
+                        disabled={pctFor(m.id) === 0}
+                        aria-label={`${m.name} minus 5 %`}
+                      >
+                        −
+                      </button>
+                      <span
+                        className={`w-11 text-center text-sm tabular-nums sm:w-10 sm:text-right ${
+                          pctFor(m.id) > 0 ? "font-semibold text-foreground" : "text-muted"
+                        }`}
+                      >
                         {pctFor(m.id)}%
                       </span>
+                      <button
+                        type="button"
+                        className="btn-ghost px-3 sm:hidden"
+                        onClick={() => setPct(m.id, Math.min(100, pctFor(m.id) + 5))}
+                        disabled={pctFor(m.id) === 100}
+                        aria-label={`${m.name} plus 5 %`}
+                      >
+                        +
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -454,8 +498,9 @@ function Editor({
 
         {saveError && <p className="text-sm text-danger">{saveError}</p>}
 
-        <div className="flex justify-end gap-2 pt-1">
-          <button className="btn-ghost" onClick={onCancel}>
+        {/* Footer klebt unten — Speichern ist ohne Scrollen erreichbar */}
+        <div className="sticky bottom-0 -mx-5 flex justify-end gap-2 rounded-b-2xl border-t bg-surface px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3">
+          <button className="btn-ghost" onClick={requestClose}>
             Abbrechen
           </button>
           <button

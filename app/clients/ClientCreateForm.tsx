@@ -1,10 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { createClientAccount, type Credentials } from "./actions";
 import CredentialsBox from "./CredentialsBox";
 
-export default function ClientCreateForm({ loginUrl }: { loginUrl: string }) {
+export default function ClientCreateForm({
+  loginUrl,
+  onDone,
+}: {
+  loginUrl: string;
+  onDone?: () => void; // im Mobile-Sheet: nach dem Schließen der Zugangsdaten zumachen
+}) {
+  // Eindeutige IDs — das Formular existiert auf der Seite ggf. zweimal
+  // (Desktop-Spalte + Mobile-Sheet)
+  const uid = useId();
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [busy, setBusy] = useState(false);
@@ -33,16 +42,19 @@ export default function ClientCreateForm({ loginUrl }: { loginUrl: string }) {
         <CredentialsBox
           creds={creds}
           loginUrl={loginUrl}
-          onClose={() => setCreds(null)}
+          onClose={() => {
+            setCreds(null);
+            onDone?.();
+          }}
         />
       ) : (
         <form onSubmit={submit} className="space-y-3">
           <div>
-            <label className="label" htmlFor="displayName">
+            <label className="label" htmlFor={`${uid}-displayName`}>
               Name
             </label>
             <input
-              id="displayName"
+              id={`${uid}-displayName`}
               className="input"
               placeholder="z.B. Max Mustermann"
               value={displayName}
@@ -51,14 +63,16 @@ export default function ClientCreateForm({ loginUrl }: { loginUrl: string }) {
             />
           </div>
           <div>
-            <label className="label" htmlFor="username">
+            <label className="label" htmlFor={`${uid}-username`}>
               Benutzername
             </label>
             <input
-              id="username"
+              id={`${uid}-username`}
               className="input"
               placeholder="z.B. max"
               autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required

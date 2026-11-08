@@ -8,6 +8,7 @@ import { addDays, startOfWeek } from "@/lib/schedule";
 import { activityStatus, frequencyStatus, getClientTrainingStats } from "@/lib/clientStatus";
 import { deleteClientAccount } from "../actions";
 import ResetPasswordButton from "../ResetPasswordButton";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +51,7 @@ export default async function ClientDetailPage({
     }),
     getClientTrainingStats(client.displayName),
     prisma.plan.findMany({
-      where: { assignedToId: client.id },
+      where: { assignedToId: client.id, archivedAt: null },
       orderBy: { order: "asc" },
       include: {
         _count: { select: { exercises: true } },
@@ -94,9 +95,12 @@ export default async function ClientDetailPage({
           </Link>
           <form action={deleteClientAccount}>
             <input type="hidden" name="id" value={client.id} />
-            <button className="btn-ghost text-danger" type="submit">
+            <ConfirmSubmitButton
+              className="btn-ghost text-danger"
+              message={`Zugang von ${client.displayName} wirklich löschen?`}
+            >
               Zugang löschen
-            </button>
+            </ConfirmSubmitButton>
           </form>
         </div>
 
@@ -196,7 +200,7 @@ function Stat({ label, value, suffix }: { label: string; value: string; suffix?:
   return (
     <div className="card-2">
       <div className="text-xs uppercase tracking-wide text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-black tabular-nums">
+      <div className="mt-1 break-words text-xl font-black tabular-nums sm:text-2xl">
         {value}
         {suffix && <span className="text-sm font-medium text-muted">{suffix}</span>}
       </div>

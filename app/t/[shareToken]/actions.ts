@@ -11,7 +11,7 @@ import { FUNNY_SAYINGS, formatSaying } from "@/lib/funnySayings";
 async function requirePlan(planId: string) {
   const account = await requireAccount();
   const plan = await prisma.plan.findUnique({ where: { id: planId } });
-  if (!plan) throw new Error("Plan nicht gefunden");
+  if (!plan || plan.archivedAt) throw new Error("Plan nicht gefunden");
   if (!(await mayAccessPlan(account, plan))) {
     throw new Error("Kein Zugriff auf diesen Plan");
   }

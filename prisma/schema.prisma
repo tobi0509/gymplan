@@ -180,6 +180,9 @@ model Plan {
   assignedTo          Account?            @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
   assignedToId        String?
   order               Int                 @default(0) // Position in der Trainings-Warteschlange des Kunden
+  // Gelöschte Pläne mit Trainingsverlauf werden nur ausgeblendet, damit
+  // Verlauf/Fortschritt erhalten bleiben. null = aktiv.
+  archivedAt          DateTime?
   createdAt           DateTime            @default(now())
   exercises           PlanExercise[]
   sessions            WorkoutSession[]

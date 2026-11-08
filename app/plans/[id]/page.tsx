@@ -18,7 +18,10 @@ export default async function PlanPage({
       assignedTo: { select: { id: true, displayName: true } },
       exercises: {
         orderBy: { order: "asc" },
-        include: { exercise: { include: { muscles: true } } },
+        include: {
+          exercise: { include: { muscles: true } },
+          _count: { select: { setLogs: true } },
+        },
       },
     },
   });
@@ -57,6 +60,7 @@ export default async function PlanPage({
             sets: pe.sets,
             targetReps: pe.targetReps,
             targetWeight: pe.targetWeight,
+            hasLogs: pe._count.setLogs > 0,
             contributions: pe.exercise.muscles.map((m) => ({
               muscleId: m.muscleId,
               percentage: m.percentage,

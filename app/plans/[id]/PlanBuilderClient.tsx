@@ -19,6 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useUndo } from "@/components/useUndo";
 import BodyMap, { toBodyData } from "@/components/BodyMap";
 import { computeCoverage, type PlanExerciseInput } from "@/lib/coverage";
 import { EQUIPMENT_LABEL, type Equipment } from "@/lib/constants";
@@ -58,6 +59,7 @@ export default function PlanBuilderClient({
   const [picker, setPicker] = useState(false);
   const [copied, setCopied] = useState(false);
   const [, start] = useTransition();
+  const undo = useUndo();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -82,12 +84,17 @@ export default function PlanBuilderClient({
       ? `${window.location.origin}/t/${plan.shareToken}`
       : `/t/${plan.shareToken}`;
 
-  function add(exerciseId: string) {
-    start(async () => {
+  // Picker bleibt offen, damit man mehrere Übungen am Stück hinzufügen kann.
+  // Rückgabe für die Zeilen-Rückmeldung im Picker.
+  async function add(exerciseId: string): Promise<boolean> {
+    undo.flush();
+    try {
       const dto = await addExerciseToPlan(plan.id, exerciseId);
       setItems((prev) => [...prev, dto]);
-    });
-    setPicker(false);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function patch(id: string, fields: Partial<PlanExerciseDTO>) {
@@ -120,14 +127,38 @@ export default function PlanBuilderClient({
     persist(id, { targetWeight: n });
   }
 
+  // Entfernen mit Rückgängig. Hat die Übung schon protokollierte Sätze,
+  // gingen die beim Löschen verloren → dann zusätzlich nachfragen.
   function remove(id: string) {
+    const idx = items.findIndex((it) => it.id === id);
+    const item = items[idx];
+    if (!item) return;
+    if (
+      item.hasLogs &&
+      !confirm(
+        `„${item.name}" hat bereits protokollierte Sätze im Verlauf des Kunden. Beim Entfernen gehen diese verloren. Trotzdem entfernen?`,
+      )
+    ) {
+      return;
+    }
     setItems((prev) => prev.filter((it) => it.id !== id));
-    start(async () => {
-      await removePlanExercise(id);
-    });
+    undo.schedule(
+      `„${item.name}" entfernt`,
+      () =>
+        start(async () => {
+          await removePlanExercise(id);
+        }),
+      () =>
+        setItems((prev) => {
+          const next = prev.slice();
+          next.splice(Math.min(idx, next.length), 0, item);
+          return next;
+        }),
+    );
   }
 
   function move(id: string, dir: "up" | "down") {
+    undo.flush();
     setItems((prev) => {
       const idx = prev.findIndex((it) => it.id === id);
       const swapWith = dir === "up" ? idx - 1 : idx + 1;
@@ -144,6 +175,7 @@ export default function PlanBuilderClient({
   function handleDragEnd(e: DragEndEvent) {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
+    undo.flush();
     setItems((prev) => {
       const oldIndex = prev.findIndex((it) => it.id === active.id);
       const newIndex = prev.findIndex((it) => it.id === over.id);
@@ -173,6 +205,7 @@ export default function PlanBuilderClient({
 
   return (
     <div>
+      {undo.toastNode}
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -231,6 +264,7 @@ export default function PlanBuilderClient({
           {picker ? (
             <ExercisePicker
               options={allExercises}
+              inPlan={items.map((it) => it.exerciseId)}
               onPick={add}
               onClose={() => setPicker(false)}
             />
@@ -316,7 +350,9 @@ function ExerciseCard({
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-1">
           <button
-            className="mt-0.5 grid h-6 w-6 shrink-0 cursor-grab place-items-center rounded-lg text-muted hover:bg-surface-2 active:cursor-grabbing"
+            className="-ml-2 -mt-2 grid h-11 w-11 shrink-0 cursor-grab place-items-center rounded-lg text-lg text-muted hover:bg-surface-2 active:cursor-grabbing"
+            // touch-action: none — sonst scrollt der Browser am Handy, statt zu ziehen
+            style={{ touchAction: "none" }}
             aria-label="Ziehen zum Umsortieren"
             {...attributes}
             {...listeners}
@@ -354,6 +390,7 @@ function ExerciseCard({
           </button>
           <button
             className="btn-ghost px-2 py-1 text-danger"
+            aria-label={`${item.name} aus dem Plan entfernen`}
             onClick={() => onRemove(item.id)}
           >
             ✕
@@ -362,7 +399,7 @@ function ExerciseCard({
       </div>
 
       {(item.category ?? "").toLowerCase() === "cardio" ? (
-        <div className="mt-3 grid grid-cols-2 gap-3 pl-8">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:pl-8">
           <NumberField
             label="Sätze"
             value={item.sets}
@@ -378,7 +415,7 @@ function ExerciseCard({
           />
         </div>
       ) : (
-        <div className="mt-3 grid grid-cols-3 gap-3 pl-8">
+        <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3 sm:pl-8">
           <NumberField
             label="Sätze"
             value={item.sets}
@@ -393,7 +430,7 @@ function ExerciseCard({
             onCommit={(v) => onCommitReps(item.id, v)}
           />
           <NumberField
-            label="Gewicht (kg)"
+            label="Gew. (kg)"
             value={item.targetWeight ?? ""}
             step={0.5}
             onChange={(v) => onPatch(item.id, { targetWeight: v === "" ? null : v })}
@@ -425,6 +462,7 @@ function NumberField({
       <label className="label">{label}</label>
       <input
         type="number"
+        inputMode={step != null && step % 1 !== 0 ? "decimal" : "numeric"}
         className="input"
         value={value}
         min={min}
@@ -442,44 +480,89 @@ function NumberField({
 
 function ExercisePicker({
   options,
+  inPlan,
   onPick,
   onClose,
 }: {
   options: ExOption[];
-  onPick: (id: string) => void;
+  inPlan: string[];
+  onPick: (id: string) => Promise<boolean>;
   onClose: () => void;
 }) {
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState<Record<string, "adding" | "added" | "error">>({});
+  // Am Handy nicht sofort die Tastatur öffnen — sie verdeckt sonst die halbe Liste
+  const [autoFocus] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches,
+  );
   const filtered = options.filter((o) =>
     o.name.toLowerCase().includes(q.toLowerCase()),
   );
+  const addedCount = Object.values(status).filter((v) => v === "added").length;
+
+  async function pick(id: string) {
+    if (status[id] === "adding") return;
+    setStatus((s) => ({ ...s, [id]: "adding" }));
+    const ok = await onPick(id);
+    setStatus((s) => ({ ...s, [id]: ok ? "added" : "error" }));
+  }
+
   return (
-    <div className="card space-y-3">
-      <div className="flex items-center gap-2">
+    // Handy: Vollbild-Sheet; Desktop: Karte an Ort und Stelle
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-base max-md:!mt-0 px-4 pb-[env(safe-area-inset-bottom)] pt-[calc(0.75rem+env(safe-area-inset-top))] md:static md:z-auto md:rounded-2xl md:border md:bg-surface md:p-5 md:shadow-card"
+      role="dialog"
+      aria-label="Übung hinzufügen"
+    >
+      <div className="flex items-center gap-2 pb-3">
         <input
-          autoFocus
+          autoFocus={autoFocus}
+          type="search"
           className="input"
           placeholder="Übung suchen…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <button className="btn-ghost" onClick={onClose}>
-          Schließen
+        <button className="btn-primary shrink-0" onClick={onClose}>
+          {addedCount > 0 ? `Fertig (${addedCount})` : "Schließen"}
         </button>
       </div>
-      <div className="max-h-72 space-y-1 overflow-y-auto">
-        {filtered.map((o) => (
-          <button
-            key={o.id}
-            onClick={() => onPick(o.id)}
-            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-surface-2"
-          >
-            <span>{o.name}</span>
-            <span className="text-xs text-muted">
-              {EQUIPMENT_LABEL[o.equipment as Equipment] ?? o.equipment}
-            </span>
-          </button>
-        ))}
+      <div className="-mx-1 flex-1 space-y-1 overflow-y-auto overscroll-contain px-1 md:max-h-72 md:flex-none">
+        {filtered.map((o) => {
+          const st = status[o.id];
+          const already = inPlan.includes(o.id);
+          return (
+            <button
+              key={o.id}
+              onClick={() => pick(o.id)}
+              disabled={st === "adding"}
+              className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left hover:bg-surface-2 ${
+                st === "added" ? "bg-accent-soft" : ""
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="block">{o.name}</span>
+                <span className="block text-xs text-muted">
+                  {EQUIPMENT_LABEL[o.equipment as Equipment] ?? o.equipment}
+                  {already && st !== "added" ? " · schon im Plan" : ""}
+                </span>
+              </span>
+              <span
+                className={`shrink-0 text-sm font-semibold ${
+                  st === "error" ? "text-danger" : "text-accent"
+                }`}
+              >
+                {st === "adding"
+                  ? "…"
+                  : st === "added"
+                    ? "✓ hinzugefügt"
+                    : st === "error"
+                      ? "Fehler – nochmal"
+                      : "+"}
+              </span>
+            </button>
+          );
+        })}
         {filtered.length === 0 && (
           <div className="px-3 py-2 text-sm text-muted">Nichts gefunden.</div>
         )}

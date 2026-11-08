@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   await requireTrainer();
   const plans = await prisma.plan.findMany({
+    where: { archivedAt: null },
     orderBy: { createdAt: "desc" },
     include: {
       _count: { select: { exercises: true, sessions: true } },

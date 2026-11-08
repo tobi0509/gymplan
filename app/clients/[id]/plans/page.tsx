@@ -23,7 +23,7 @@ export default async function ClientPlansPage({
 
   const [plans, clients] = await Promise.all([
     prisma.plan.findMany({
-      where: { assignedToId: client.id },
+      where: { assignedToId: client.id, archivedAt: null },
       orderBy: { order: "asc" },
       include: {
         _count: { select: { exercises: true } },

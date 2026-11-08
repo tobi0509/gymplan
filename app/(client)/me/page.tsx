@@ -17,7 +17,7 @@ export default async function MePage() {
       where: { accountId: account.id },
     }),
     prisma.plan.findMany({
-      where: { assignedToId: account.id },
+      where: { assignedToId: account.id, archivedAt: null },
       orderBy: { order: "asc" },
       include: {
         _count: { select: { exercises: true } },

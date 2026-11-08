@@ -15,6 +15,7 @@ export type PlanExerciseDTO = {
   targetReps: number | null;
   targetWeight: number | null;
   contributions: { muscleId: string; percentage: number }[];
+  hasLogs?: boolean; // schon protokollierte Sätze → Entfernen löscht Verlauf
 };
 
 async function toDTO(planExerciseId: string): Promise<PlanExerciseDTO> {

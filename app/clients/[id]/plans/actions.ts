@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { removePlan } from "@/lib/plans";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireTrainer, ROLE } from "@/lib/auth";
@@ -52,7 +53,7 @@ export async function deleteQueueEntry(formData: FormData) {
   const id = String(formData.get("id") || "");
   const accountId = String(formData.get("accountId") || "");
   if (!id) return;
-  await prisma.plan.delete({ where: { id } });
+  await removePlan(id);
   revalidatePath(`/clients/${accountId}/plans`);
   revalidatePath(`/clients/${accountId}`);
 }

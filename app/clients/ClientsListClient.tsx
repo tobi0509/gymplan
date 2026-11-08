@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { deleteClientAccount } from "./actions";
 import ResetPasswordButton from "./ResetPasswordButton";
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { WEEKDAY_LABELS } from "@/lib/schedule";
 import type { Tone } from "@/lib/clientStatus";
 
@@ -78,7 +79,7 @@ export default function ClientsListClient({
 
       {clients.length === 0 && (
         <div className="card text-muted">
-          Noch keine Kunden. Lege rechts den ersten Zugang an.
+          Noch keine Kunden. Lege den ersten Zugang über „Neuer Kunde“ an.
         </div>
       )}
       {clients.length > 0 && sorted.length === 0 && (
@@ -108,13 +109,13 @@ export default function ClientsListClient({
               <ResetPasswordButton accountId={c.id} loginUrl={loginUrl} />
               <form action={deleteClientAccount}>
                 <input type="hidden" name="id" value={c.id} />
-                <button
+                <ConfirmSubmitButton
                   className="btn-ghost text-danger"
-                  type="submit"
                   aria-label={`Zugang von ${c.displayName} löschen`}
+                  message={`Zugang von ${c.displayName} wirklich löschen?`}
                 >
                   ✕
-                </button>
+                </ConfirmSubmitButton>
               </form>
             </div>
           </div>

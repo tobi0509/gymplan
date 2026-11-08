@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { deletePlan } from "./actions";
+import { useUndo } from "@/components/useUndo";
 
 type PlanItem = {
   id: string;
@@ -25,8 +26,32 @@ export default function PlansListClient({
 }) {
   // "ALL" = alle Pläne, "NONE" = ohne Kunde, sonst Account-ID des Kunden
   const [filter, setFilter] = useState<string>("ALL");
+  // Optimistisch ausgeblendete Pläne (Löschen mit Rückgängig)
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [, start] = useTransition();
+  const undo = useUndo();
 
-  const filtered = plans.filter((p) =>
+  function remove(p: PlanItem) {
+    setHidden((h) => new Set(h).add(p.id));
+    undo.schedule(
+      `„${p.name}" gelöscht`,
+      () => {
+        const fd = new FormData();
+        fd.set("id", p.id);
+        start(async () => {
+          await deletePlan(fd);
+        });
+      },
+      () =>
+        setHidden((h) => {
+          const next = new Set(h);
+          next.delete(p.id);
+          return next;
+        }),
+    );
+  }
+
+  const filtered = plans.filter((p) => !hidden.has(p.id)).filter((p) =>
     filter === "ALL"
       ? true
       : filter === "NONE"
@@ -36,6 +61,7 @@ export default function PlansListClient({
 
   return (
     <section className="space-y-3">
+      {undo.toastNode}
       {clients.length > 0 && plans.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           <button
@@ -67,7 +93,7 @@ export default function PlansListClient({
 
       {plans.length === 0 && (
         <div className="card text-muted">
-          Noch keine Pläne. Erstelle rechts deinen ersten Plan.
+          Noch keine Pläne. Trainings legst du beim jeweiligen Kunden unter „Trainings bearbeiten“ an.
         </div>
       )}
       {plans.length > 0 && filtered.length === 0 && (
@@ -95,16 +121,14 @@ export default function PlansListClient({
             <Link href={`/plans/${p.id}`} className="btn-ghost">
               Öffnen
             </Link>
-            <form action={deletePlan}>
-              <input type="hidden" name="id" value={p.id} />
-              <button
-                className="btn-ghost text-danger"
-                type="submit"
-                aria-label="Plan löschen"
-              >
-                ✕
-              </button>
-            </form>
+            <button
+              type="button"
+              className="btn-ghost text-danger"
+              aria-label={`Plan ${p.name} löschen`}
+              onClick={() => remove(p)}
+            >
+              ✕
+            </button>
           </div>
         </div>
       ))}

@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireAccount, ROLE } from "@/lib/auth";
@@ -31,6 +31,7 @@ export default async function ClientPlanPage({
   if (!plan) notFound();
   // Kunden sehen nur Pläne, auf die sie Zugriff haben (direkt/Programm/frei)
   if (!(await mayAccessPlan(account, plan))) notFound();
+  if (plan.archivedAt) redirect(`/t/${params.shareToken}/history`);
 
   const muscles = await prisma.muscle.findMany({ orderBy: { name: "asc" } });
 

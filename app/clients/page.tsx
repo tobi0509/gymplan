@@ -5,6 +5,7 @@ import { requireTrainer, ROLE } from "@/lib/auth";
 import { parseWeekdays, startOfWeek, addDays } from "@/lib/schedule";
 import { activityStatus, frequencyStatus } from "@/lib/clientStatus";
 import ClientCreateForm from "./ClientCreateForm";
+import ClientCreateSheet from "./ClientCreateSheet";
 import ClientsListClient, { type ClientRow } from "./ClientsListClient";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export default async function ClientsPage() {
     where: { role: ROLE.CLIENT },
     orderBy: { displayName: "asc" },
     include: {
-      plans: { select: { name: true } },
+      plans: { where: { archivedAt: null }, select: { name: true } },
       trainingPreference: {
         select: { weekdays: true, frequency: true, updatedAt: true },
       },
@@ -83,17 +84,20 @@ export default async function ClientsPage() {
     <>
       <TrainerNav />
       <main className="mx-auto max-w-5xl px-4 pt-6 pb-tabbar md:py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Kunden</h1>
-          <p className="mt-1 text-muted">
-            Lege Zugänge an, weise Pläne zu und verschicke die Zugangsdaten.
-          </p>
+        <div className="mb-6 space-y-4 md:mb-8">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Kunden</h1>
+            <p className="mt-1 text-muted">
+              Lege Zugänge an, weise Pläne zu und verschicke die Zugangsdaten.
+            </p>
+          </div>
+          <ClientCreateSheet loginUrl={loginUrl} />
         </div>
 
         <div className="grid gap-6 md:grid-cols-[1fr_320px]">
           <ClientsListClient clients={rows} loginUrl={loginUrl} />
 
-          <aside>
+          <aside className="hidden md:block">
             <ClientCreateForm loginUrl={loginUrl} />
           </aside>
         </div>
